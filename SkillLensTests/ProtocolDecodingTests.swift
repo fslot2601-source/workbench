@@ -67,4 +67,23 @@ final class ProtocolDecodingTests: XCTestCase {
         XCTAssertEqual(mapped.event, .preToolUse)
         XCTAssertEqual(mapped.runnableState, .ready)
     }
+
+    func testRateLimitsAndUsageDecodeOfficialPayloads() throws {
+        let rateData = Data(#"{"rateLimits":{"limitId":"codex","limitName":null,"planType":"pro","primary":{"usedPercent":27,"windowDurationMins":300,"resetsAt":1783879000},"secondary":null,"rateLimitReachedType":null,"credits":null},"rateLimitsByLimitId":null,"rateLimitResetCredits":{"availableCount":3}}"#.utf8)
+        let rate = try JSONDecoder().decode(AccountRateLimitsResponse.self, from: rateData)
+        XCTAssertEqual(rate.rateLimits.primary?.usedPercent, 27)
+        XCTAssertEqual(rate.rateLimitResetCredits?.availableCount, 3)
+
+        let usageData = Data(#"{"summary":{"lifetimeTokens":3600000000,"peakDailyTokens":52000000,"longestRunningTurnSec":540,"currentStreakDays":8,"longestStreakDays":14},"dailyUsageBuckets":[{"startDate":"2026-07-12","tokens":12345}]}"#.utf8)
+        let usage = try JSONDecoder().decode(AccountTokenUsageResponse.self, from: usageData)
+        XCTAssertEqual(usage.summary.lifetimeTokens, 3_600_000_000)
+        XCTAssertEqual(usage.dailyUsageBuckets?.first?.tokens, 12_345)
+    }
+
+    func testMCPInventoryDecodesWithoutExposingSchemas() throws {
+        let data = Data(#"{"data":[{"name":"sample","authStatus":"oAuth","tools":{"search":{"name":"search","title":"Search","description":"Find items","inputSchema":{"type":"object"}}},"resources":[],"resourceTemplates":[],"serverInfo":{"name":"sample","title":"Sample MCP","version":"1.0","description":null,"websiteUrl":"https://example.test"}}],"nextCursor":null}"#.utf8)
+        let response = try JSONDecoder().decode(MCPServerStatusListResponse.self, from: data)
+        XCTAssertEqual(response.data.first?.tools.count, 1)
+        XCTAssertEqual(response.data.first?.authStatus, "oAuth")
+    }
 }

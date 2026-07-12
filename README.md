@@ -1,12 +1,14 @@
 # Skill Lens
 
-Skill Lens 是一个面向 macOS 的 Codex 本地能力控制台。它把 Skills 和 Hooks 的有效状态转换成普通人能理解的中文界面，并提供诊断与安全控制。
+Skill Lens 是一个面向 macOS 的 Codex 本地能力控制台。它把 Skills、Hooks、MCP、账户用量和本机存储转换成普通人能理解的中文界面，并提供诊断与安全控制。
 
 项目目标不是替代 Codex，也不是做通用配置文件编辑器，而是回答四个问题：
 
 - Codex 当前发现了哪些能力？
 - 某个 Skill 是否启用、是否允许自动匹配、来自哪里？
 - 某个 Hook 何时运行、是否可信、为什么没有生效？
+- MCP 是否只是写进配置，还是已经能读取到实际能力？
+- 当前限额与 Token 活动如何，本机 Codex 又占用了多少空间？
 - 修改后 Codex 是否真正接受了新状态？
 
 ## 已实现
@@ -14,6 +16,9 @@ Skill Lens 是一个面向 macOS 的 Codex 本地能力控制台。它把 Skills
 - 原生 SwiftUI 三栏界面，按工作区读取 Codex 的实际有效状态
 - Skills 的隐式、显式、隐藏、来源、依赖、错误与安全启停
 - Hooks 的触发时机、来源、信任、managed 状态、处理器、脱敏命令与安全启停
+- MCP 的配置开关、连接阶段、工具与资源数量；界面不展示参数、环境变量、查询字符串或工具 schema
+- Codex 官方提供的账户限额、重置时间、Token 汇总与每日趋势；接口未提供的费用和常用模型明确标为不可用
+- Codex Home 分类占用与缓存清理；只有固定 `cache` 目录可清理，其余内容默认受保护
 - 仅限当前 App Server 连接的 Hook 瞬态运行记录，不冒充全局历史
 - Hook 配置写入前版本校验；Skill 与 Hook 均使用 Codex 专用接口、写后回读验证和本地变更记录
 - App Server 超时、未知字段、命名差异和意外退出处理
@@ -47,12 +52,14 @@ xcodebuild -project SkillLens.xcodeproj -scheme SkillLens -configuration Debug -
 
 ## 隐私与安全
 
-- 默认不联网，不包含遥测或用户账户系统。
+- 不包含遥测、广告或独立用户账户系统。用量页只通过本机 Codex App Server 请求当前 Codex 账户数据。
 - 不捆绑 Codex，也不读取 Codex 登录令牌。
 - Hook 命令、Skill Markdown 和图标路径均按不可信本地内容处理。
 - 不执行界面里展示的 Skill 或 Hook 内容。
 - Hook 启停使用 Codex `config/read` 与 `config/batchWrite`，通过版本号避免覆盖并发修改。
-- 1.0 只承诺展示本应用连接所能观察到的 Hook 运行事件，不声称监控其他 Codex 客户端的全局会话。
+- 只承诺展示本应用连接所能观察到的 Hook 运行事件，不声称监控其他 Codex 客户端的全局会话。
+- MCP 的“已启用”只表示有效配置开关；只有实际返回能力清单时才标为能力已读取。
+- 存储页只读取文件元数据；自动清理限定在当前 Codex Home 下的固定缓存白名单，并在删除前二次校验。
 
 由于应用需要启动本机 Codex 并访问用户选择的工作区，当前开源构建不启用 App Sandbox。发布构建应启用 Hardened Runtime 并完成开发者签名与公证。
 

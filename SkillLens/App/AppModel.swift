@@ -12,12 +12,27 @@ final class AppModel {
     var hooks: [HookRecord] = []
     var hookWarnings: [String] = []
     var hookRuns: [HookRunRecord] = []
+    var rateLimits: [RateLimitRecord] = []
+    var resetCreditsAvailable: Int?
+    var tokenUsageSummary: TokenUsageSummary?
+    var dailyTokenUsage: [DailyTokenUsage] = []
+    var usageRefreshedAt: Date?
+    var usageError: String?
+    var mcpServers: [MCPRecord] = []
+    var mcpError: String?
+    var storageRecords: [StorageRecord] = []
+    var storageError: String?
     var changeHistory: [ChangeRecord] = []
     var isRefreshing = false
+    var isRefreshingUsage = false
+    var isRefreshingMCP = false
+    var isScanningStorage = false
+    var isClearingStorage = false
     var lastError: String?
 
     private let service = CodexService()
     private let locator = CodexExecutableLocator()
+    private let storageService = CodexStorageService()
     private var eventTask: Task<Void, Never>?
     private var hasBootstrapped = false
 
@@ -43,19 +58,7 @@ final class AppModel {
         defer { isRefreshing = false }
 
         do {
-            if case .connected = connectionState {
-                // Keep the current connection.
-            } else {
-                connectionState = .locating
-                let preferred = UserDefaults.standard.string(forKey: "codexExecutablePath")
-                guard let executableURL = locator.locate(preferredPath: preferred) else {
-                    throw AppModelError.codexNotFound
-                }
-                connectionState = .connecting(executablePath: executableURL.path)
-                let info = try await service.connect(executableURL: executableURL)
-                connectionState = .connected(info)
-                startEventObservationIfNeeded()
-            }
+            _ = try await ensureConnected()
 
             var partialFailures: [String] = []
             do {
@@ -191,6 +194,117 @@ final class AppModel {
         }
     }
 
+    func refreshUsage() async {
+        guard !isRefreshingUsage else { return }
+        isRefreshingUsage = true
+        usageError = nil
+        defer { isRefreshingUsage = false }
+        do {
+            _ = try await ensureConnected()
+            var failures: [String] = []
+            do {
+                let result = try await service.readRateLimits()
+                rateLimits = result.records
+                resetCreditsAvailable = result.resetCredits
+            } catch {
+                rateLimits = []
+                resetCreditsAvailable = nil
+                failures.append("限额：\(safeMessage(error))")
+            }
+            do {
+                let result = try await service.readTokenUsage()
+                tokenUsageSummary = result.summary
+                dailyTokenUsage = result.daily
+            } catch {
+                tokenUsageSummary = nil
+                dailyTokenUsage = []
+                failures.append("Token 用量：\(safeMessage(error))")
+            }
+            usageRefreshedAt = Date()
+            if !failures.isEmpty { usageError = failures.joined(separator: "；") }
+        } catch {
+            usageError = safeMessage(error)
+        }
+    }
+
+    func refreshMCP() async {
+        guard !isRefreshingMCP else { return }
+        isRefreshingMCP = true
+        mcpError = nil
+        defer { isRefreshingMCP = false }
+        do {
+            _ = try await ensureConnected()
+            mcpServers = try await service.listMCPServers(cwd: workspaceURL)
+        } catch {
+            mcpServers = []
+            mcpError = safeMessage(error)
+        }
+    }
+
+    func setMCP(_ server: MCPRecord, enabled: Bool) async {
+        mcpError = nil
+        do {
+            try await service.setMCPEnabled(name: server.name, enabled: enabled, cwd: workspaceURL)
+            await refreshMCP()
+            guard mcpServers.first(where: { $0.name == server.name })?.isEnabled == enabled else {
+                throw CodexServiceError.writeVerificationFailed
+            }
+            addChange(
+                kind: .mcp,
+                name: server.displayName,
+                identifier: server.name,
+                previous: server.isEnabled,
+                requested: enabled,
+                outcome: .verified,
+                message: "Codex 配置版本校验通过，MCP 配置已重新加载并验证。"
+            )
+        } catch {
+            mcpError = safeMessage(error)
+            addChange(
+                kind: .mcp,
+                name: server.displayName,
+                identifier: server.name,
+                previous: server.isEnabled,
+                requested: enabled,
+                outcome: .failed,
+                message: safeMessage(error)
+            )
+        }
+    }
+
+    func scanStorage() async {
+        guard !isScanningStorage else { return }
+        isScanningStorage = true
+        storageError = nil
+        defer { isScanningStorage = false }
+        do {
+            let info = try await ensureConnected()
+            storageRecords = await storageService.scan(codexHome: URL(fileURLWithPath: info.codexHome))
+        } catch {
+            storageRecords = []
+            storageError = safeMessage(error)
+        }
+    }
+
+    func clearStorage(_ record: StorageRecord) async {
+        guard record.kind.cleanable, !isClearingStorage else { return }
+        isClearingStorage = true
+        storageError = nil
+        defer { isClearingStorage = false }
+        do {
+            let info = try await ensureConnected()
+            let home = URL(fileURLWithPath: info.codexHome)
+            await service.disconnect()
+            connectionState = .idle
+            try await storageService.clear(record: record, codexHome: home)
+            storageRecords = await storageService.scan(codexHome: home)
+            await refresh(forceReload: true)
+        } catch {
+            storageError = safeMessage(error)
+            if case .connected = connectionState { } else { await refresh(forceReload: false) }
+        }
+    }
+
     func clearChangeHistory() {
         changeHistory.removeAll()
         UserDefaults.standard.removeObject(forKey: "changeHistory")
@@ -269,6 +383,18 @@ final class AppModel {
             await service.disconnect()
             lastError = message
             connectionState = .failed(message)
+        case "mcpServer/startupStatus/updated":
+            guard let payload = event.params?.objectValue,
+                  let name = payload["name"]?.stringValue,
+                  let rawStatus = payload["status"]?.stringValue
+            else { return }
+            let status = MCPStartupStatus(rawValue: rawStatus) ?? .unknown
+            let error = payload["error"]?.stringValue.map(DiagnosticRedactor.commandSummary)
+            if let index = mcpServers.firstIndex(where: { $0.name == name }) {
+                mcpServers[index] = mcpServers[index].updating(startupStatus: status, errorMessage: error)
+            }
+        case "account/rateLimits/updated":
+            Task { await refreshUsage() }
         default:
             break
         }
@@ -277,12 +403,29 @@ final class AppModel {
     private func safeMessage(_ error: Error) -> String {
         DiagnosticRedactor.commandSummary(error.localizedDescription)
     }
+
+    private func ensureConnected() async throws -> CodexServerInfo {
+        if case let .connected(info) = connectionState { return info }
+        connectionState = .locating
+        let preferred = UserDefaults.standard.string(forKey: "codexExecutablePath")
+        guard let executableURL = locator.locate(preferredPath: preferred) else {
+            throw AppModelError.codexNotFound
+        }
+        connectionState = .connecting(executablePath: executableURL.path)
+        let info = try await service.connect(executableURL: executableURL)
+        connectionState = .connected(info)
+        startEventObservationIfNeeded()
+        return info
+    }
 }
 
 enum SidebarDestination: String, CaseIterable, Identifiable {
     case dashboard
     case skills
     case hooks
+    case usage
+    case mcp
+    case storage
     case history
     case diagnostics
 
@@ -293,6 +436,9 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .dashboard: "总览"
         case .skills: "Skills"
         case .hooks: "Hooks"
+        case .usage: "用量"
+        case .mcp: "MCP"
+        case .storage: "存储"
         case .history: "变更记录"
         case .diagnostics: "诊断"
         }
@@ -303,6 +449,9 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .dashboard: "square.grid.2x2"
         case .skills: "wand.and.stars"
         case .hooks: "point.3.connected.trianglepath.dotted"
+        case .usage: "chart.xyaxis.line"
+        case .mcp: "server.rack"
+        case .storage: "internaldrive"
         case .history: "clock.arrow.circlepath"
         case .diagnostics: "stethoscope"
         }

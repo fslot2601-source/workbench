@@ -51,6 +51,25 @@ final class StateModelTests: XCTestCase {
         )
 
         XCTAssertEqual(skill.effectiveState, .disabled)
+        XCTAssertFalse(skill.hasProblem)
+    }
+
+    func testDisabledSkillWithErrorIsHiddenNotProblem() {
+        let skill = SkillRecord(
+            name: "hidden",
+            displayName: "Hidden",
+            description: "Hidden",
+            shortDescription: nil,
+            path: "/tmp/hidden/SKILL.md",
+            scope: .user,
+            rawScope: "user",
+            isEnabled: false,
+            invocationPolicy: .explicitOnly,
+            dependencies: [],
+            errors: ["Broken metadata"]
+        )
+        XCTAssertEqual(skill.effectiveState, .disabled)
+        XCTAssertFalse(skill.hasProblem)
     }
 
     func testSkillErrorHasHighestPriority() {

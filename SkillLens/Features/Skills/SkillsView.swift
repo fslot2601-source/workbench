@@ -77,7 +77,7 @@ struct SkillsView: View {
             case .automatic: skill.invocationPolicy == .automaticAllowed && skill.isEnabled
             case .explicit: skill.invocationPolicy == .explicitOnly && skill.isEnabled
             case .hidden: !skill.isEnabled
-            case .attention: skill.effectiveState != .available
+            case .attention: skill.hasProblem
             }
             guard matchesFilter else { return false }
             guard !searchText.isEmpty else { return true }

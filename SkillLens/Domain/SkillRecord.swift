@@ -16,10 +16,14 @@ struct SkillRecord: Identifiable, Hashable, Sendable {
     var id: String { path }
 
     var effectiveState: SkillEffectiveState {
-        if !errors.isEmpty { return .error }
         if !isEnabled { return .disabled }
+        if !errors.isEmpty { return .error }
         if dependencies.contains(where: { $0.availability == .missing }) { return .missingDependency }
         return .available
+    }
+
+    var hasProblem: Bool {
+        isEnabled && [.error, .missingDependency].contains(effectiveState)
     }
 }
 

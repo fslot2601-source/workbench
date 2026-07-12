@@ -20,10 +20,14 @@ struct RootView: View {
                 case .dashboard: DashboardView()
                 case .skills: SkillsView()
                 case .hooks: HooksView()
+                case .usage: UsageView()
+                case .mcp: MCPView()
+                case .storage: StorageView()
                 case .history: ChangeHistoryView()
                 case .diagnostics: DiagnosticsView()
                 }
             }
+            .id(model.selection)
             .toolbar {
                 ToolbarItemGroup {
                     Button {

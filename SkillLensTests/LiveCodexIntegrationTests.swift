@@ -27,9 +27,11 @@ final class LiveCodexIntegrationTests: XCTestCase {
             let cwd = URL(fileURLWithPath: cwdPath)
             let skills = try await service.listSkills(cwd: cwd, forceReload: true)
             let hookResult = try await service.listHooks(cwd: cwd)
+            let mcpServers = try await service.listMCPServers(cwd: cwd)
 
             XCTAssertGreaterThanOrEqual(skills.count, 0)
             XCTAssertGreaterThanOrEqual(hookResult.hooks.count, 0)
+            XCTAssertGreaterThanOrEqual(mcpServers.count, 0)
             await service.disconnect()
         } catch {
             await service.disconnect()

@@ -59,6 +59,11 @@ extension JSONValue {
         return value
     }
 
+    var boolValue: Bool? {
+        guard case let .bool(value) = self else { return nil }
+        return value
+    }
+
     var arrayValue: [JSONValue]? {
         guard case let .array(value) = self else { return nil }
         return value

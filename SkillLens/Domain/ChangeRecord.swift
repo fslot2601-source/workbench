@@ -40,8 +40,15 @@ struct ChangeRecord: Identifiable, Codable, Hashable, Sendable {
 enum ChangeKind: String, Codable, Sendable {
     case skill
     case hook
+    case mcp
 
-    var title: String { self == .skill ? "Skill" : "Hook" }
+    var title: String {
+        switch self {
+        case .skill: "Skill"
+        case .hook: "Hook"
+        case .mcp: "MCP"
+        }
+    }
 }
 
 enum ChangeOutcome: String, Codable, Sendable {

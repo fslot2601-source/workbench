@@ -134,3 +134,93 @@ struct ConfigBatchWriteResponse: Codable, Sendable {
     let filePath: String
     let overriddenMetadata: JSONValue?
 }
+
+struct AccountRateLimitsResponse: Codable, Sendable {
+    let rateLimits: RateLimitSnapshotWire
+    let rateLimitsByLimitId: [String: RateLimitSnapshotWire]?
+    let rateLimitResetCredits: RateLimitResetCreditsWire?
+}
+
+struct RateLimitResetCreditsWire: Codable, Sendable {
+    let availableCount: Int
+}
+
+struct RateLimitSnapshotWire: Codable, Sendable {
+    let limitId: String?
+    let limitName: String?
+    let planType: String?
+    let primary: RateLimitWindowWire?
+    let secondary: RateLimitWindowWire?
+    let rateLimitReachedType: String?
+    let credits: CreditsSnapshotWire?
+}
+
+struct RateLimitWindowWire: Codable, Sendable {
+    let usedPercent: Int
+    let windowDurationMins: Int?
+    let resetsAt: Int64?
+}
+
+struct CreditsSnapshotWire: Codable, Sendable {
+    let balance: String?
+    let hasCredits: Bool
+    let unlimited: Bool
+}
+
+struct AccountTokenUsageResponse: Codable, Sendable {
+    let summary: AccountTokenUsageSummaryWire
+    let dailyUsageBuckets: [DailyTokenUsageWire]?
+}
+
+struct AccountTokenUsageSummaryWire: Codable, Sendable {
+    let lifetimeTokens: Int64?
+    let peakDailyTokens: Int64?
+    let longestRunningTurnSec: Int64?
+    let currentStreakDays: Int64?
+    let longestStreakDays: Int64?
+}
+
+struct DailyTokenUsageWire: Codable, Sendable {
+    let startDate: String
+    let tokens: Int64
+}
+
+struct MCPServerStatusListResponse: Codable, Sendable {
+    let data: [MCPServerStatusWire]
+    let nextCursor: String?
+}
+
+struct MCPServerStatusWire: Codable, Sendable {
+    let name: String
+    let authStatus: String
+    let tools: [String: MCPToolWire]
+    let resources: [MCPResourceWire]
+    let resourceTemplates: [MCPResourceTemplateWire]
+    let serverInfo: MCPServerInfoWire?
+}
+
+struct MCPToolWire: Codable, Sendable {
+    let name: String
+    let title: String?
+    let description: String?
+}
+
+struct MCPResourceWire: Codable, Sendable {
+    let name: String
+    let title: String?
+    let uri: String
+}
+
+struct MCPResourceTemplateWire: Codable, Sendable {
+    let name: String
+    let title: String?
+    let uriTemplate: String
+}
+
+struct MCPServerInfoWire: Codable, Sendable {
+    let name: String
+    let title: String?
+    let version: String
+    let description: String?
+    let websiteUrl: String?
+}

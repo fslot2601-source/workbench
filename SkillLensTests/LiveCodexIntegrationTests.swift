@@ -1,0 +1,67 @@
+import Foundation
+import XCTest
+@testable import SkillLens
+
+final class LiveCodexIntegrationTests: XCTestCase {
+    func testCurrentCodexCanListSkillsAndHooks() async throws {
+        let locator = CodexExecutableLocator()
+        guard let executable = locator.locate() else {
+            throw XCTSkip("Codex CLI is not installed on this machine.")
+        }
+        let isolatedHome = FileManager.default.temporaryDirectory
+            .appending(path: "skilllens-live-test-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: isolatedHome, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: isolatedHome) }
+
+        let service = CodexService()
+        do {
+            let info = try await service.connect(
+                executableURL: executable,
+                environment: ["CODEX_HOME": isolatedHome.path]
+            )
+            XCTAssertFalse(info.userAgent.isEmpty)
+            XCTAssertEqual(URL(fileURLWithPath: info.codexHome).standardizedFileURL, isolatedHome.standardizedFileURL)
+
+            let cwdPath = ProcessInfo.processInfo.environment["SKILLLENS_TEST_CWD"]
+                ?? FileManager.default.homeDirectoryForCurrentUser.path
+            let cwd = URL(fileURLWithPath: cwdPath)
+            let skills = try await service.listSkills(cwd: cwd, forceReload: true)
+            let hookResult = try await service.listHooks(cwd: cwd)
+
+            XCTAssertGreaterThanOrEqual(skills.count, 0)
+            XCTAssertGreaterThanOrEqual(hookResult.hooks.count, 0)
+            await service.disconnect()
+        } catch {
+            await service.disconnect()
+            throw error
+        }
+    }
+
+    func testCurrentCodexCanSafelyWriteHookOverrideInIsolatedHome() async throws {
+        let locator = CodexExecutableLocator()
+        guard let executable = locator.locate() else {
+            throw XCTSkip("Codex CLI is not installed on this machine.")
+        }
+        let isolatedHome = FileManager.default.temporaryDirectory
+            .appending(path: "skilllens-hook-write-test-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: isolatedHome, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: isolatedHome) }
+
+        let service = CodexService()
+        do {
+            _ = try await service.connect(
+                executableURL: executable,
+                environment: ["CODEX_HOME": isolatedHome.path]
+            )
+            try await service.setHookEnabled(key: "skilllens-test-hook", enabled: false, cwd: isolatedHome)
+            await service.disconnect()
+
+            let config = try String(contentsOf: isolatedHome.appending(path: "config.toml"), encoding: .utf8)
+            XCTAssertTrue(config.contains("skilllens-test-hook"))
+            XCTAssertTrue(config.contains("enabled = false"))
+        } catch {
+            await service.disconnect()
+            throw error
+        }
+    }
+}

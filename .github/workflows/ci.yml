@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version
+      - name: Build and test
+        run: >-
+          xcodebuild
+          -project SkillLens.xcodeproj
+          -scheme SkillLens
+          -configuration Debug
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          test

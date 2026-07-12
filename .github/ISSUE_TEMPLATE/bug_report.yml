@@ -1,0 +1,27 @@
+name: Bug report
+description: 报告可复现的问题（请先移除敏感信息）
+title: "[Bug] "
+body:
+  - type: textarea
+    attributes:
+      label: 问题描述
+      description: 发生了什么，预期是什么？
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: macOS 与 Codex 版本
+      placeholder: macOS 15.x, codex-cli 0.x
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 复现步骤
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已移除 token、密码、私人路径和未脱敏 Hook 命令
+          required: true

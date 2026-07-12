@@ -20,4 +20,36 @@ final class LaunchUITests: XCTestCase {
         app.typeKey("1", modifierFlags: [.command, .shift])
         XCTAssertEqual(app.windows.count, 1, "显示主窗口命令不应创建重复窗口。")
     }
+
+    @MainActor
+    func testEveryPrimaryScreenIsReachableFromSidebar() {
+        let app = XCUIApplication()
+        app.launch()
+        defer { app.terminate() }
+
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15), "Skill Lens 主窗口没有出现。")
+
+        let destinations = [
+            (id: "dashboard", title: "总览"),
+            (id: "skills", title: "Skills"),
+            (id: "hooks", title: "Hooks"),
+            (id: "usage", title: "用量"),
+            (id: "mcp", title: "MCP"),
+            (id: "storage", title: "存储"),
+            (id: "history", title: "变更记录"),
+            (id: "diagnostics", title: "诊断"),
+        ]
+
+        for destination in destinations {
+            let sidebarItem = app.descendants(matching: .any)["sidebar-\(destination.id)"].firstMatch
+            XCTAssertTrue(sidebarItem.waitForExistence(timeout: 5), "侧栏缺少 \(destination.title)。")
+            sidebarItem.click()
+            let screen = app.descendants(matching: .any)["screen-\(destination.id)"].firstMatch
+            XCTAssertTrue(
+                screen.waitForExistence(timeout: 10),
+                "无法打开 \(destination.title) 页面。"
+            )
+            XCTAssertEqual(app.windows.count, 1, "切换到 \(destination.title) 时不应创建额外窗口。")
+        }
+    }
 }

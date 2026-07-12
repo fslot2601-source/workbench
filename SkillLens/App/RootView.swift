@@ -9,6 +9,7 @@ struct RootView: View {
             List(SidebarDestination.allCases, selection: $model.selection) { destination in
                 Label(destination.title, systemImage: destination.symbol)
                     .tag(destination)
+                    .accessibilityIdentifier("sidebar-\(destination.rawValue)")
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 250)
             .safeAreaInset(edge: .bottom) {
@@ -28,6 +29,7 @@ struct RootView: View {
                 }
             }
             .id(model.selection)
+            .accessibilityIdentifier("screen-\(model.selection.rawValue)")
             .toolbar {
                 ToolbarItemGroup {
                     Button {

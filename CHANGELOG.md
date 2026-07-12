@@ -14,6 +14,7 @@
 - 增加隐私清单、通用架构 Release archive、ZIP/DMG、SHA-256、可选 Developer ID 签名与公证流程。
 - 强化发布门禁：逐包比对 ZIP/DMG 内应用，公开模式强制 Developer ID、公证票据与 Gatekeeper 验证，失败产物不会进入 `dist/`。
 - CI 固定 Xcode 16.2，同时执行测试与未签名 Release 交付物烟雾验证。
+- 扩展 UI 自动化烟雾测试，逐一验证八个主要页面可从侧栏到达且不会产生重复窗口。
 
 ## 1.0.0 - 2026-07-12
 

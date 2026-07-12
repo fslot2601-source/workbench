@@ -45,7 +45,13 @@ struct HooksView: View {
                 .padding(12)
                 Divider()
 
-                if filteredHooks.isEmpty {
+                if model.hooks.isEmpty && model.isRefreshing {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在读取 Hooks…").foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if filteredHooks.isEmpty {
                     ContentUnavailableView(
                         "当前工作区没有 Hook",
                         systemImage: "point.3.connected.trianglepath.dotted",

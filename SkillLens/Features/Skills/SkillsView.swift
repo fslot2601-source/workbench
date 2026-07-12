@@ -11,7 +11,13 @@ struct SkillsView: View {
             VStack(spacing: 0) {
                 filterBar
                 Divider()
-                if filteredSkills.isEmpty {
+                if model.skills.isEmpty && model.isRefreshing {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在读取 Skills…").foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if filteredSkills.isEmpty {
                     ContentUnavailableView(
                         "没有匹配的 Skill",
                         systemImage: "wand.and.stars.inverse",

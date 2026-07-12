@@ -15,10 +15,11 @@ Skill Lens 是 Codex App Server 的本地控制面客户端。1.0 覆盖 Skills 
 3. Hooks：展示 effective config、来源、信任、managed 状态、matcher 与 handler，保留未知事件原始值。
 4. 安全控制：Hook 配置写入前读取版本并使用乐观并发；Skill 使用专用 `skills/config/write` 接口；两类写入均回读验证，managed 配置拒绝修改。
 5. 运行与恢复：处理 app-server 退出、半行 JSON、未知字段、超时和断线；运行状态明确标记为瞬态。
-6. 发布：中文优先界面、单元测试、协议 fixture、运行验收、README、许可证与无签名开源构建；英文界面作为后续社区本地化工作，不阻塞个人版 1.0。
+6. 发布：中文优先界面、单元测试、协议 fixture、真实运行验收、README、许可证、通用架构 Release 包、校验和与 DMG；公开二进制必须使用 Developer ID 签名并完成 Apple 公证。英文界面作为后续社区本地化工作，不阻塞当前发布。
 7. 账户用量：展示官方限额窗口、重置时间、Token 汇总和每日趋势；官方未提供的数据明确标为不可用。
 8. MCP：合并有效配置与当前连接能力清单，区分配置、启动、可用、失败与停用状态；配置写入使用版本校验、重载和回读验证。
 9. 存储：按类别汇总 Codex Home 占用；只有固定 `cache` 目录可以自动清理，且删除前断开 App Server、校验路径、卷、符号链接与扫描后变化。
+10. 发布工程：CI 同时运行 Debug 测试与无签名 Release 冒烟构建；本地发布脚本产出 ZIP、DMG 和 SHA-256，并支持可选的 Developer ID 签名、公证与 stapling。
 
 ## 兼容策略
 

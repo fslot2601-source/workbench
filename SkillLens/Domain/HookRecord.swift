@@ -23,10 +23,20 @@ struct HookRecord: Identifiable, Hashable, Sendable {
 
     var id: String { "\(sourcePath)#\(key)" }
 
+    var isEffectivelyManaged: Bool {
+        isManaged || trustStatus == .managed || [
+            HookSource.mdm,
+            .cloudManagedConfig,
+            .cloudRequirements,
+            .legacyManagedConfigFile,
+            .legacyManagedConfigMdm
+        ].contains(source)
+    }
+
     var runnableState: HookRunnableState {
         if !isEnabled { return .disabled }
         if handlerType != .command { return .unsupportedHandler }
-        if isManaged || trustStatus == .managed || trustStatus == .trusted { return .ready }
+        if isEffectivelyManaged || trustStatus == .trusted { return .ready }
         if trustStatus == .modified { return .changedSinceTrust }
         return .needsTrust
     }

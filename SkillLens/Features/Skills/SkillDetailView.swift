@@ -104,8 +104,8 @@ struct SkillDetailView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(skill.isEnabled ? .secondary : .accentColor)
-            .disabled(isChanging || skill.scope == .admin)
-            .help(skill.scope == .admin ? "管理员提供的 Skill 不能在这里修改" : "修改后会重新读取并验证 Codex 的实际状态")
+            .disabled(isChanging || model.isChangingConfiguration || !skill.canModify)
+            .help(skill.canModify ? "修改后会重新读取并验证 Codex 的实际状态" : "系统、管理员或来源未知的 Skill 不能在这里修改")
         }
     }
 

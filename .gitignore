@@ -2,6 +2,7 @@
 DerivedData/
 .build/
 build/
+dist/
 *.xcuserstate
 xcuserdata/
 SkillLens.xcodeproj/project.xcworkspace/xcuserdata/

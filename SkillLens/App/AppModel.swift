@@ -22,12 +22,15 @@ final class AppModel {
     var mcpError: String?
     var storageRecords: [StorageRecord] = []
     var storageError: String?
+    var storageNotice: String?
     var changeHistory: [ChangeRecord] = []
     var isRefreshing = false
     var isRefreshingUsage = false
     var isRefreshingMCP = false
     var isScanningStorage = false
     var isClearingStorage = false
+    var isChangingConfiguration = false
+    var hasCompletedInitialRefresh = false
     var lastError: String?
 
     private let service = CodexService()
@@ -35,6 +38,9 @@ final class AppModel {
     private let storageService = CodexStorageService()
     private var eventTask: Task<Void, Never>?
     private var hasBootstrapped = false
+    private var workspaceGeneration = 0
+    private var connectionGeneration = 0
+    private var activeRefreshID: UUID?
 
     init() {
         if let saved = UserDefaults.standard.string(forKey: "workspacePath"), !saved.isEmpty {
@@ -46,41 +52,76 @@ final class AppModel {
     }
 
     func bootstrap() async {
-        guard !hasBootstrapped else { return }
+        if hasBootstrapped {
+            if case .failed = connectionState { await refresh(forceReload: true) }
+            return
+        }
         hasBootstrapped = true
         await refresh(forceReload: true)
     }
 
     func refresh(forceReload: Bool = false) async {
-        guard !isRefreshing else { return }
+        let requestID = UUID()
+        let generation = workspaceGeneration
+        let workspace = workspaceURL
+        activeRefreshID = requestID
         isRefreshing = true
         lastError = nil
-        defer { isRefreshing = false }
+        defer {
+            if activeRefreshID == requestID {
+                isRefreshing = false
+                hasCompletedInitialRefresh = true
+            }
+        }
 
         do {
             _ = try await ensureConnected()
 
             var partialFailures: [String] = []
             do {
-                skills = try await service.listSkills(cwd: workspaceURL, forceReload: forceReload)
+                let result = try await service.listSkills(cwd: workspace, forceReload: forceReload)
+                guard activeRefreshID == requestID,
+                      workspaceGeneration == generation,
+                      workspaceURL == workspace
+                else { return }
+                skills = result
             } catch {
+                guard activeRefreshID == requestID,
+                      workspaceGeneration == generation,
+                      workspaceURL == workspace
+                else { return }
                 skills = []
                 partialFailures.append("Skills：\(safeMessage(error))")
             }
             do {
-                let hookResult = try await service.listHooks(cwd: workspaceURL)
+                let hookResult = try await service.listHooks(cwd: workspace)
+                guard activeRefreshID == requestID,
+                      workspaceGeneration == generation,
+                      workspaceURL == workspace
+                else { return }
                 hooks = hookResult.hooks
                 hookWarnings = hookResult.warnings
             } catch {
+                guard activeRefreshID == requestID,
+                      workspaceGeneration == generation,
+                      workspaceURL == workspace
+                else { return }
                 hooks = []
                 hookWarnings = []
                 partialFailures.append("Hooks：\(safeMessage(error))")
             }
-            if !partialFailures.isEmpty {
+            if activeRefreshID == requestID, !partialFailures.isEmpty {
                 lastError = "部分功能不可用。" + partialFailures.joined(separator: "；")
             }
         } catch {
+            guard activeRefreshID == requestID,
+                  workspaceGeneration == generation,
+                  workspaceURL == workspace
+            else { return }
             let message = safeMessage(error)
+            skills = []
+            hooks = []
+            hookWarnings = []
             lastError = message
             connectionState = .failed(message)
         }
@@ -98,11 +139,14 @@ final class AppModel {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let newWorkspace = url.standardizedFileURL
         guard newWorkspace != workspaceURL else { return }
+        workspaceGeneration += 1
         workspaceURL = newWorkspace
         skills = []
         hooks = []
         hookWarnings = []
         hookRuns = []
+        mcpServers = []
+        mcpError = nil
         UserDefaults.standard.set(workspaceURL.path, forKey: "workspacePath")
         Task { await refresh(forceReload: true) }
     }
@@ -116,6 +160,7 @@ final class AppModel {
         panel.allowsMultipleSelection = false
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        connectionGeneration += 1
         UserDefaults.standard.set(url.path, forKey: "codexExecutablePath")
         Task {
             await service.disconnect()
@@ -129,10 +174,19 @@ final class AppModel {
     }
 
     func setSkill(_ skill: SkillRecord, enabled: Bool) async {
+        let workspace = workspaceURL
+        let generation = workspaceGeneration
+        guard !isChangingConfiguration else {
+            lastError = AppModelError.configurationChangeInProgress.localizedDescription
+            return
+        }
+        isChangingConfiguration = true
+        defer { isChangingConfiguration = false }
         lastError = nil
         do {
-            try await service.setSkillEnabled(path: skill.path, enabled: enabled)
-            let refreshed = try await service.listSkills(cwd: workspaceURL, forceReload: true)
+            try await service.setSkillEnabled(skill, enabled: enabled, cwd: workspace)
+            let refreshed = try await service.listSkills(cwd: workspace, forceReload: true)
+            guard workspaceGeneration == generation, workspaceURL == workspace else { return }
             guard refreshed.first(where: { $0.path == skill.path })?.isEnabled == enabled else {
                 throw AppModelError.writeVerificationFailed
             }
@@ -147,6 +201,7 @@ final class AppModel {
                 message: "Codex 已写入，并重新读取确认状态生效。"
             )
         } catch {
+            guard workspaceGeneration == generation, workspaceURL == workspace else { return }
             lastError = safeMessage(error)
             addChange(
                 kind: .skill,
@@ -161,11 +216,20 @@ final class AppModel {
     }
 
     func setHook(_ hook: HookRecord, enabled: Bool) async {
+        let workspace = workspaceURL
+        let generation = workspaceGeneration
+        guard !isChangingConfiguration else {
+            lastError = AppModelError.configurationChangeInProgress.localizedDescription
+            return
+        }
+        isChangingConfiguration = true
+        defer { isChangingConfiguration = false }
         lastError = nil
         do {
-            guard !hook.isManaged else { throw CodexServiceError.managedHook }
-            try await service.setHookEnabled(key: hook.key, enabled: enabled, cwd: workspaceURL)
-            let result = try await service.listHooks(cwd: workspaceURL)
+            guard !hook.isEffectivelyManaged else { throw CodexServiceError.managedHook }
+            try await service.setHookEnabled(hook, enabled: enabled, cwd: workspace)
+            let result = try await service.listHooks(cwd: workspace)
+            guard workspaceGeneration == generation, workspaceURL == workspace else { return }
             guard result.hooks.first(where: { $0.key == hook.key })?.isEnabled == enabled else {
                 throw CodexServiceError.writeVerificationFailed
             }
@@ -181,6 +245,7 @@ final class AppModel {
                 message: "Codex 配置版本校验通过，并重新读取确认状态生效。"
             )
         } catch {
+            guard workspaceGeneration == generation, workspaceURL == workspace else { return }
             lastError = safeMessage(error)
             addChange(
                 kind: .hook,
@@ -223,28 +288,54 @@ final class AppModel {
             usageRefreshedAt = Date()
             if !failures.isEmpty { usageError = failures.joined(separator: "；") }
         } catch {
+            rateLimits = []
+            resetCreditsAvailable = nil
+            tokenUsageSummary = nil
+            dailyTokenUsage = []
             usageError = safeMessage(error)
         }
     }
 
     func refreshMCP() async {
         guard !isRefreshingMCP else { return }
+        let workspace = workspaceURL
+        let generation = workspaceGeneration
         isRefreshingMCP = true
         mcpError = nil
         defer { isRefreshingMCP = false }
         do {
             _ = try await ensureConnected()
-            mcpServers = try await service.listMCPServers(cwd: workspaceURL)
+            let records = try await service.listMCPServers(cwd: workspace)
+            guard workspaceGeneration == generation, workspaceURL == workspace else { return }
+            mcpServers = records
         } catch {
+            guard workspaceGeneration == generation, workspaceURL == workspace else { return }
             mcpServers = []
             mcpError = safeMessage(error)
         }
     }
 
     func setMCP(_ server: MCPRecord, enabled: Bool) async {
+        let workspace = workspaceURL
+        let generation = workspaceGeneration
+        guard server.workspacePath == workspaceURL.path else {
+            mcpError = "工作区已经切换。请重新读取 MCP 后再修改。"
+            return
+        }
+        guard server.canModify else {
+            mcpError = server.readOnlyReason ?? "这个 MCP 配置保持只读。"
+            return
+        }
+        guard !isChangingConfiguration else {
+            mcpError = AppModelError.configurationChangeInProgress.localizedDescription
+            return
+        }
+        isChangingConfiguration = true
+        defer { isChangingConfiguration = false }
         mcpError = nil
         do {
-            try await service.setMCPEnabled(name: server.name, enabled: enabled, cwd: workspaceURL)
+            try await service.setMCPEnabled(name: server.name, enabled: enabled, cwd: workspace)
+            guard workspaceGeneration == generation, workspaceURL == workspace else { return }
             await refreshMCP()
             guard mcpServers.first(where: { $0.name == server.name })?.isEnabled == enabled else {
                 throw CodexServiceError.writeVerificationFailed
@@ -259,6 +350,7 @@ final class AppModel {
                 message: "Codex 配置版本校验通过，MCP 配置已重新加载并验证。"
             )
         } catch {
+            guard workspaceGeneration == generation, workspaceURL == workspace else { return }
             mcpError = safeMessage(error)
             addChange(
                 kind: .mcp,
@@ -276,6 +368,7 @@ final class AppModel {
         guard !isScanningStorage else { return }
         isScanningStorage = true
         storageError = nil
+        storageNotice = nil
         defer { isScanningStorage = false }
         do {
             let info = try await ensureConnected()
@@ -294,10 +387,12 @@ final class AppModel {
         do {
             let info = try await ensureConnected()
             let home = URL(fileURLWithPath: info.codexHome)
+            connectionGeneration += 1
             await service.disconnect()
             connectionState = .idle
             try await storageService.clear(record: record, codexHome: home)
             storageRecords = await storageService.scan(codexHome: home)
+            storageNotice = "缓存已安全清理。会话、配置、Skills、插件和数据库没有被修改。"
             await refresh(forceReload: true)
         } catch {
             storageError = safeMessage(error)
@@ -322,13 +417,13 @@ final class AppModel {
         changeHistory.insert(
             ChangeRecord(
                 kind: kind,
-                targetName: name,
-                targetIdentifier: identifier,
-                workspacePath: workspaceURL.path,
+                targetName: DiagnosticRedactor.sanitize(name),
+                targetIdentifier: identifier.hasPrefix("/") ? DiagnosticRedactor.pathSummary(identifier) : DiagnosticRedactor.sanitize(identifier),
+                workspacePath: workspaceURL.lastPathComponent.isEmpty ? "本机" : workspaceURL.lastPathComponent,
                 previousEnabled: previous,
                 requestedEnabled: requested,
                 outcome: outcome,
-                message: message
+                message: DiagnosticRedactor.sanitize(message)
             ),
             at: 0
         )
@@ -342,7 +437,23 @@ final class AppModel {
         guard let data = UserDefaults.standard.data(forKey: "changeHistory"),
               let records = try? JSONDecoder().decode([ChangeRecord].self, from: data)
         else { return }
-        changeHistory = Array(records.prefix(500))
+        changeHistory = Array(records.prefix(500)).map { record in
+            ChangeRecord(
+                id: record.id,
+                occurredAt: record.occurredAt,
+                kind: record.kind,
+                targetName: DiagnosticRedactor.sanitize(record.targetName),
+                targetIdentifier: record.targetIdentifier.hasPrefix("/") ? DiagnosticRedactor.pathSummary(record.targetIdentifier) : DiagnosticRedactor.sanitize(record.targetIdentifier),
+                workspacePath: URL(fileURLWithPath: record.workspacePath).lastPathComponent,
+                previousEnabled: record.previousEnabled,
+                requestedEnabled: record.requestedEnabled,
+                outcome: record.outcome,
+                message: DiagnosticRedactor.sanitize(record.message)
+            )
+        }
+        if let sanitized = try? JSONEncoder().encode(changeHistory) {
+            UserDefaults.standard.set(sanitized, forKey: "changeHistory")
+        }
     }
 
     private func startEventObservationIfNeeded() {
@@ -358,13 +469,18 @@ final class AppModel {
     private func handle(_ event: AppServerEvent) async {
         switch event.method {
         case "skills/changed":
+            let workspace = workspaceURL
+            let generation = workspaceGeneration
             do {
-                skills = try await service.listSkills(cwd: workspaceURL, forceReload: true)
+                let refreshed = try await service.listSkills(cwd: workspace, forceReload: true)
+                guard workspaceGeneration == generation, workspaceURL == workspace else { return }
+                skills = refreshed
             } catch {
+                guard workspaceGeneration == generation, workspaceURL == workspace else { return }
                 lastError = safeMessage(error)
             }
         case "hook/started", "hook/completed", "hook_started", "hook_completed":
-            guard let run = HookRunParser.parse(event: event, ownership: .owned) else {
+            guard let run = HookRunParser.parse(event: event, ownership: .attached) else {
                 lastError = "Codex 发送了当前版本无法解析的 Hook 运行事件；配置状态不受影响。"
                 return
             }
@@ -380,9 +496,18 @@ final class AppModel {
             let status = event.params?.objectValue?["status"]?.numberValue.map(Int.init)
             let message = status.map { "Codex App Server 已意外退出（状态码 \($0)）。可以点击重新扫描恢复连接。" }
                 ?? "Codex App Server 已意外退出。可以点击重新扫描恢复连接。"
+            connectionGeneration += 1
             await service.disconnect()
             lastError = message
             connectionState = .failed(message)
+            skills = []
+            hooks = []
+            hookWarnings = []
+            mcpServers = []
+            rateLimits = []
+            resetCreditsAvailable = nil
+            tokenUsageSummary = nil
+            dailyTokenUsage = []
         case "mcpServer/startupStatus/updated":
             guard let payload = event.params?.objectValue,
                   let name = payload["name"]?.stringValue,
@@ -405,17 +530,27 @@ final class AppModel {
     }
 
     private func ensureConnected() async throws -> CodexServerInfo {
-        if case let .connected(info) = connectionState { return info }
+        if case let .connected(info) = connectionState, await service.isConnected() { return info }
+        if case .connected = connectionState { connectionState = .idle }
+        let generation = connectionGeneration
         connectionState = .locating
         let preferred = UserDefaults.standard.string(forKey: "codexExecutablePath")
         guard let executableURL = locator.locate(preferredPath: preferred) else {
+            connectionState = .failed(AppModelError.codexNotFound.localizedDescription)
             throw AppModelError.codexNotFound
         }
         connectionState = .connecting(executablePath: executableURL.path)
-        let info = try await service.connect(executableURL: executableURL)
-        connectionState = .connected(info)
-        startEventObservationIfNeeded()
-        return info
+        do {
+            let info = try await service.connect(executableURL: executableURL)
+            guard connectionGeneration == generation else { throw CancellationError() }
+            connectionState = .connected(info)
+            startEventObservationIfNeeded()
+            return info
+        } catch {
+            guard connectionGeneration == generation else { throw error }
+            connectionState = .failed(safeMessage(error))
+            throw error
+        }
     }
 }
 
@@ -461,6 +596,7 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
 enum AppModelError: LocalizedError {
     case codexNotFound
     case writeVerificationFailed
+    case configurationChangeInProgress
 
     var errorDescription: String? {
         switch self {
@@ -468,6 +604,8 @@ enum AppModelError: LocalizedError {
             "没有找到 Codex CLI。请在诊断页手动选择 codex 可执行文件。"
         case .writeVerificationFailed:
             "Codex 接受了写入请求，但重新读取后状态没有生效。原状态已保留。"
+        case .configurationChangeInProgress:
+            "另一项配置正在修改，请等待它完成后再试。"
         }
     }
 }
@@ -483,12 +621,15 @@ enum HookRunParser {
               let startedNumber = (run["startedAt"] ?? run["started_at"])?.numberValue
         else { return nil }
 
-        let entries = run["entries"]?.arrayValue?.compactMap { item -> HookRunEntry? in
+        let entries = run["entries"]?.arrayValue?.prefix(50).compactMap { item -> HookRunEntry? in
             guard let object = item.objectValue,
                   let kind = object["kind"]?.stringValue,
                   let text = object["text"]?.stringValue
             else { return nil }
-            return HookRunEntry(kind: kind, text: text)
+            return HookRunEntry(
+                kind: DiagnosticRedactor.sanitize(kind),
+                text: DiagnosticRedactor.sanitize(text)
+            )
         } ?? []
 
         return HookRunRecord(

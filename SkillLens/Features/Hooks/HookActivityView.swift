@@ -8,7 +8,7 @@ struct HookActivityView: View {
             ContentUnavailableView(
                 "还没有可观察的 Hook 运行",
                 systemImage: "waveform.path.ecg",
-                description: Text("这里只显示 Skill Lens 当前连接所管理会话的瞬态事件，不代表其他 Codex 客户端的历史。")
+                description: Text("这里只显示 Skill Lens 当前 App Server 连接观察到的瞬态事件；无法确认归属时会标为“已附加会话”。")
             )
         } else {
             VStack(spacing: 0) {
@@ -36,7 +36,7 @@ struct HookActivityView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     ForEach(run.entries, id: \.self) { entry in
-                        Text("\(entry.kind)：\(DiagnosticRedactor.commandSummary(entry.text))")
+                        Text("\(DiagnosticRedactor.sanitize(entry.kind))：\(DiagnosticRedactor.commandSummary(entry.text))")
                             .font(.caption)
                             .foregroundStyle(entry.kind == "error" ? .red : .secondary)
                     }

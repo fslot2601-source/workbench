@@ -48,29 +48,55 @@ actor CodexStorageService {
         let home = codexHome.standardizedFileURL
         let target = URL(fileURLWithPath: record.path).standardizedFileURL
         guard home.path != "/", !home.path.isEmpty else { throw CodexStorageError.invalidCodexHome }
+        guard fileManager.fileExists(atPath: home.path) else { throw CodexStorageError.invalidCodexHome }
+        let suppliedHomeValues = try home.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey])
+        guard suppliedHomeValues.isDirectory == true, suppliedHomeValues.isSymbolicLink != true else {
+            throw CodexStorageError.symbolicLink
+        }
+        let resolvedHome = home.resolvingSymlinksInPath().standardizedFileURL
+        let resolvedTarget = target.resolvingSymlinksInPath().standardizedFileURL
+        guard resolvedHome == home, resolvedTarget == target else { throw CodexStorageError.symbolicLink }
         guard target.deletingLastPathComponent() == home,
               cleanableComponents.contains(target.lastPathComponent)
         else { throw CodexStorageError.outsideCodexHome }
 
+        guard fileManager.fileExists(atPath: target.path) else { return }
         let values = try target.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey, .volumeIdentifierKey])
         let homeValues = try home.resourceValues(forKeys: [.volumeIdentifierKey])
         guard values.isSymbolicLink != true else { throw CodexStorageError.symbolicLink }
-        guard values.volumeIdentifier as? AnyHashable == homeValues.volumeIdentifier as? AnyHashable else {
+        guard values.isDirectory == true else { throw CodexStorageError.notDirectory }
+        guard let targetVolume = values.volumeIdentifier as? AnyHashable,
+              let homeVolume = homeValues.volumeIdentifier as? AnyHashable,
+              targetVolume == homeVolume
+        else {
             throw CodexStorageError.outsideCodexHome
         }
-        guard fileManager.fileExists(atPath: target.path) else { return }
         let current = measure(target)
         guard current.bytes == record.sizeBytes, current.count == record.itemCount else {
             throw CodexStorageError.changedSinceScan
         }
 
-        if values.isDirectory == true {
-            let quarantine = home.appending(path: ".skilllens-cleanup-\(UUID().uuidString)")
+        let quarantine = home.appending(path: ".skilllens-cleanup-\(UUID().uuidString)")
+        var movedToQuarantine = false
+        do {
             try fileManager.moveItem(at: target, to: quarantine)
+            movedToQuarantine = true
             try fileManager.createDirectory(at: target, withIntermediateDirectories: false)
             try fileManager.removeItem(at: quarantine)
-        } else {
-            try fileManager.removeItem(at: target)
+            movedToQuarantine = false
+        } catch {
+            if movedToQuarantine, fileManager.fileExists(atPath: quarantine.path) {
+                if fileManager.fileExists(atPath: target.path) {
+                    try? fileManager.removeItem(at: target)
+                }
+                do {
+                    try fileManager.moveItem(at: quarantine, to: target)
+                    movedToQuarantine = false
+                } catch {
+                    throw CodexStorageError.rollbackFailed(quarantinePath: quarantine.path)
+                }
+            }
+            throw error
         }
     }
 
@@ -132,7 +158,9 @@ enum CodexStorageError: LocalizedError, Sendable {
     case invalidCodexHome
     case outsideCodexHome
     case symbolicLink
+    case notDirectory
     case changedSinceScan
+    case rollbackFailed(quarantinePath: String)
 
     var errorDescription: String? {
         switch self {
@@ -140,7 +168,9 @@ enum CodexStorageError: LocalizedError, Sendable {
         case .invalidCodexHome: "Codex Home 路径无效，清理已取消。"
         case .outsideCodexHome: "清理目标不在当前 Codex Home 的安全白名单内。"
         case .symbolicLink: "清理目标是符号链接，为避免误删真实目录，操作已取消。"
+        case .notDirectory: "cache 不是目录，为避免误删未知文件，操作已取消。"
         case .changedSinceScan: "缓存内容在扫描后发生了变化。请重新扫描并再次确认。"
+        case .rollbackFailed(let path): "清理没有完成，缓存已保留在 \(path)。请勿继续清理，并在 Finder 中检查该目录。"
         }
     }
 }

@@ -40,6 +40,14 @@ struct SkillsListEntry: Codable, Sendable {
     let cwd: String
     let errors: [SkillWireError]
     let skills: [SkillWireMetadata]
+
+    private enum CodingKeys: String, CodingKey { case cwd, errors, skills }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        cwd = try container.decode(String.self, forKey: .cwd)
+        errors = try container.decodeIfPresent([SkillWireError].self, forKey: .errors) ?? []
+        skills = try container.decodeIfPresent([SkillWireMetadata].self, forKey: .skills) ?? []
+    }
 }
 
 struct SkillWireError: Codable, Sendable {
@@ -69,6 +77,12 @@ struct SkillWireInterface: Codable, Sendable {
 
 struct SkillWireDependencies: Codable, Sendable {
     let tools: [SkillWireToolDependency]
+
+    private enum CodingKeys: String, CodingKey { case tools }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tools = try container.decodeIfPresent([SkillWireToolDependency].self, forKey: .tools) ?? []
+    }
 }
 
 struct SkillWireToolDependency: Codable, Sendable {
@@ -89,6 +103,15 @@ struct HooksListEntry: Codable, Sendable {
     let errors: [HookWireError]
     let warnings: [String]
     let hooks: [HookWireMetadata]
+
+    private enum CodingKeys: String, CodingKey { case cwd, errors, warnings, hooks }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        cwd = try container.decode(String.self, forKey: .cwd)
+        errors = try container.decodeIfPresent([HookWireError].self, forKey: .errors) ?? []
+        warnings = try container.decodeIfPresent([String].self, forKey: .warnings) ?? []
+        hooks = try container.decodeIfPresent([HookWireMetadata].self, forKey: .hooks) ?? []
+    }
 }
 
 struct HookWireError: Codable, Sendable {
@@ -112,11 +135,35 @@ struct HookWireMetadata: Codable, Sendable {
     let isManaged: Bool
     let currentHash: String
     let trustStatus: String
+
+    private enum CodingKeys: String, CodingKey {
+        case key, eventName, handlerType, matcher, command, timeoutSec, statusMessage
+        case sourcePath, source, pluginId, displayOrder, enabled, isManaged, currentHash, trustStatus
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        key = try container.decode(String.self, forKey: .key)
+        eventName = try container.decode(String.self, forKey: .eventName)
+        handlerType = try container.decodeIfPresent(String.self, forKey: .handlerType) ?? "unknown"
+        matcher = try container.decodeIfPresent(String.self, forKey: .matcher)
+        command = try container.decodeIfPresent(String.self, forKey: .command)
+        timeoutSec = try container.decodeIfPresent(Int.self, forKey: .timeoutSec) ?? 0
+        statusMessage = try container.decodeIfPresent(String.self, forKey: .statusMessage)
+        sourcePath = try container.decodeIfPresent(String.self, forKey: .sourcePath) ?? ""
+        source = try container.decodeIfPresent(String.self, forKey: .source) ?? "unknown"
+        pluginId = try container.decodeIfPresent(String.self, forKey: .pluginId)
+        displayOrder = try container.decodeIfPresent(Int.self, forKey: .displayOrder) ?? 0
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        isManaged = try container.decodeIfPresent(Bool.self, forKey: .isManaged) ?? false
+        currentHash = try container.decodeIfPresent(String.self, forKey: .currentHash) ?? ""
+        trustStatus = try container.decodeIfPresent(String.self, forKey: .trustStatus) ?? "unknown"
+    }
 }
 
 struct ConfigReadResponse: Codable, Sendable {
     let config: JSONValue
-    let origins: [String: JSONValue]
+    let origins: [String: JSONValue]?
     let layers: [ConfigLayerWire]?
 }
 
@@ -163,8 +210,8 @@ struct RateLimitWindowWire: Codable, Sendable {
 
 struct CreditsSnapshotWire: Codable, Sendable {
     let balance: String?
-    let hasCredits: Bool
-    let unlimited: Bool
+    let hasCredits: Bool?
+    let unlimited: Bool?
 }
 
 struct AccountTokenUsageResponse: Codable, Sendable {
@@ -197,6 +244,20 @@ struct MCPServerStatusWire: Codable, Sendable {
     let resources: [MCPResourceWire]
     let resourceTemplates: [MCPResourceTemplateWire]
     let serverInfo: MCPServerInfoWire?
+
+    private enum CodingKeys: String, CodingKey {
+        case name, authStatus, tools, resources, resourceTemplates, serverInfo
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        authStatus = try container.decodeIfPresent(String.self, forKey: .authStatus) ?? "unknown"
+        tools = try container.decodeIfPresent([String: MCPToolWire].self, forKey: .tools) ?? [:]
+        resources = try container.decodeIfPresent([MCPResourceWire].self, forKey: .resources) ?? []
+        resourceTemplates = try container.decodeIfPresent([MCPResourceTemplateWire].self, forKey: .resourceTemplates) ?? []
+        serverInfo = try container.decodeIfPresent(MCPServerInfoWire.self, forKey: .serverInfo)
+    }
 }
 
 struct MCPToolWire: Codable, Sendable {
@@ -220,7 +281,7 @@ struct MCPResourceTemplateWire: Codable, Sendable {
 struct MCPServerInfoWire: Codable, Sendable {
     let name: String
     let title: String?
-    let version: String
+    let version: String?
     let description: String?
     let websiteUrl: String?
 }

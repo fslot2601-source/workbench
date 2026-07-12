@@ -17,7 +17,7 @@ struct HookDetailView: View {
                             HStack {
                                 StatusBadge(text: hook.runnableState.title, color: hook.runnableState.color)
                                 StatusBadge(text: hook.trustStatus.title, color: trustColor)
-                                if hook.isManaged {
+                                if hook.isEffectivelyManaged {
                                     StatusBadge(text: "不可由用户修改", color: .purple, symbol: "lock.fill")
                                 }
                             }
@@ -32,8 +32,8 @@ struct HookDetailView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(hook.isEnabled ? .secondary : .accentColor)
-                        .disabled(isChanging || hook.isManaged)
-                        .help(hook.isManaged ? "管理员托管的 Hook 不能修改" : "通过 Codex 配置接口写入，并在写后重新读取验证")
+                        .disabled(isChanging || model.isChangingConfiguration || hook.isEffectivelyManaged)
+                        .help(hook.isEffectivelyManaged ? "管理员托管的 Hook 不能修改" : "通过 Codex 配置接口写入，并在写后重新读取验证")
                     }
                 }
 

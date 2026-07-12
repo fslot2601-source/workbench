@@ -11,13 +11,21 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Codex 能力总览")
                         .font(.largeTitle.bold())
-                    Text("这里显示当前工作区真正被 Codex 发现的 Skills 和 Hooks。")
+                    Text("查看当前工作区能力、MCP、账户用量与本机存储状态。")
                         .foregroundStyle(.secondary)
                 }
 
                 ConnectionBanner(state: model.connectionState, error: model.lastError)
 
-                LazyVGrid(columns: columns, spacing: 14) {
+                if !model.hasCompletedInitialRefresh {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在连接 Codex 并读取当前工作区…")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 220)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 14) {
                     MetricCard(
                         title: "Skills",
                         value: "\(model.skills.count)",
@@ -46,6 +54,7 @@ struct DashboardView: View {
                         symbol: "clock.arrow.circlepath",
                         tint: .teal
                     )
+                    }
                 }
 
                 Text("状态说明：隐式 Skill 可由 Codex 根据任务自动匹配；显式 Skill 需要用 $名称 点名；隐藏 Skill 不参与发现。这里不把“已启用”误报成“本次已经使用”。")
@@ -66,6 +75,21 @@ struct DashboardView: View {
                     }
                     .padding(16)
                     .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
+                }
+
+                if model.hasCompletedInitialRefresh, model.skills.isEmpty, model.hooks.isEmpty, model.lastError != nil {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("还没有读到 Codex 能力").font(.headline)
+                            Text("可以重新连接，或前往诊断页手动选择 Codex。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("重新连接") { Task { await model.refresh(forceReload: true) } }
+                        Button("打开诊断") { model.selection = .diagnostics }
+                    }
+                    .padding(16)
+                    .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 14))
                 }
             }
             .padding(24)

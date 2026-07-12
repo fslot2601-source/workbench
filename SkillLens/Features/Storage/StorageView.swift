@@ -12,6 +12,10 @@ struct StorageView: View {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                 }
+                if let notice = model.storageNotice {
+                    Label(notice, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
                 if model.storageRecords.isEmpty && model.isScanningStorage {
                     VStack(spacing: 12) {
                         ProgressView()
@@ -54,7 +58,7 @@ struct StorageView: View {
             }
             Button("取消", role: .cancel) { pendingCleanup = nil }
         } message: { record in
-            Text("仅删除 \(record.path) 中可重新生成的缓存。本应用会先断开 Codex，若内容在扫描后变化则取消清理。会话、配置、凭据、Skills、插件和数据库不会被删除。")
+            Text("仅删除当前 Codex Home 的 cache 目录中可重新生成的缓存。本应用会先断开 Codex，若内容在扫描后变化则取消清理。会话、配置、凭据、Skills、插件和数据库不会被删除。")
         }
     }
 
@@ -92,7 +96,7 @@ private struct StorageRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle().fill(color).frame(width: 10, height: 10)
+            Circle().fill(color).frame(width: 10, height: 10).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(record.kind.title).font(.headline)
@@ -112,6 +116,7 @@ private struct StorageRow: View {
                     Image(systemName: "folder")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("在 Finder 中显示 \(record.kind.title)")
             }
             if record.kind.cleanable {
                 Button("清理", role: .destructive, action: clean)

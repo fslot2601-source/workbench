@@ -50,6 +50,17 @@
                ReferencedContainer = "container:SkillLens.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0DC39AF1DB2C0AAD2EEE3996"
+               BuildableName = "SkillLensUITests.xctest"
+               BlueprintName = "SkillLensUITests"
+               ReferencedContainer = "container:SkillLens.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

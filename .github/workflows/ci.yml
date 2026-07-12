@@ -9,14 +9,40 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Toolchain
-        run: xcodebuild -version
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
       - name: Build and test
         run: >-
           xcodebuild
           -project SkillLens.xcodeproj
           -scheme SkillLens
           -configuration Debug
+          -derivedDataPath "$RUNNER_TEMP/SkillLensDerivedData"
           -destination 'platform=macOS'
+          -skip-testing:SkillLensUITests
           CODE_SIGNING_ALLOWED=NO
           test
+
+  unsigned-release-smoke:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build unsigned release artifacts
+        run: ./scripts/build-release.sh
+      - name: Upload smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Skill-Lens-unsigned-smoke
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7

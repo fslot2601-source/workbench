@@ -89,4 +89,31 @@ final class StateModelTests: XCTestCase {
 
         XCTAssertEqual(skill.effectiveState, .error)
     }
+
+    func testManagedHookSourcesCannotBeModified() {
+        for source in [HookSource.mdm, .cloudManagedConfig, .legacyManagedConfigFile] {
+            let hook = HookRecord(
+                key: "managed",
+                event: .stop,
+                rawEventName: "stop",
+                handlerType: .command,
+                rawHandlerType: "command",
+                matcher: nil,
+                command: nil,
+                timeoutSeconds: 5,
+                statusMessage: nil,
+                sourcePath: "/tmp/config.toml",
+                source: source,
+                rawSource: source.rawValue,
+                pluginID: nil,
+                displayOrder: 0,
+                isEnabled: true,
+                isManaged: false,
+                currentHash: "hash",
+                trustStatus: .trusted,
+                rawTrustStatus: "trusted"
+            )
+            XCTAssertTrue(hook.isEffectivelyManaged)
+        }
+    }
 }

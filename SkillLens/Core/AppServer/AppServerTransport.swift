@@ -11,10 +11,13 @@ actor AppServerTransport {
     private var nextRequestID = 1
     private var outputReader: PipeLineReader?
     private var errorReader: PipeLineReader?
-    private var isStopping = false
+    private var generation: UUID?
 
     init() {
-        let pair = AsyncStream.makeStream(of: AppServerEvent.self)
+        let pair = AsyncStream.makeStream(
+            of: AppServerEvent.self,
+            bufferingPolicy: .bufferingNewest(512)
+        )
         events = pair.stream
         eventContinuation = pair.continuation
     }
@@ -26,6 +29,7 @@ actor AppServerTransport {
         let inputPipe = Pipe()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
+        let generation = UUID()
 
         process.executableURL = executableURL
         process.arguments = ["app-server", "--stdio"]
@@ -37,19 +41,19 @@ actor AppServerTransport {
         process.standardError = errorPipe
 
         try process.run()
-        isStopping = false
+        self.generation = generation
         self.process = process
         inputHandle = inputPipe.fileHandleForWriting
         process.terminationHandler = { [weak self] terminatedProcess in
             let status = terminatedProcess.terminationStatus
-            Task { await self?.processDidExit(status: status) }
+            Task { await self?.processDidExit(status: status, generation: generation) }
         }
 
         let outputHandle = outputPipe.fileHandleForReading
         let outputReader = PipeLineReader(handle: outputHandle) { [weak self] line in
-            Task { await self?.receive(line: line) }
+            Task { await self?.receive(line: line, generation: generation) }
         } onEnd: { [weak self] in
-            Task { await self?.finish(with: AppServerTransportError.processExited) }
+            Task { await self?.streamDidEnd(generation: generation) }
         }
         self.outputReader = outputReader
         outputReader.start()
@@ -82,16 +86,22 @@ actor AppServerTransport {
         try inputHandle.write(contentsOf: data)
     }
 
+    func isRunning() -> Bool {
+        process?.isRunning == true && inputHandle != nil && generation != nil
+    }
+
     func stop() {
-        isStopping = true
+        let runningProcess = process
+        runningProcess?.terminationHandler = nil
+        generation = nil
         outputReader?.stop()
         errorReader?.stop()
         outputReader = nil
         errorReader = nil
-        process?.terminate()
         process = nil
         inputHandle = nil
         finish(with: AppServerTransportError.processExited)
+        if runningProcess?.isRunning == true { runningProcess?.terminate() }
     }
 
     private func requestValue(method: String, params: JSONValue) async throws -> JSONValue {
@@ -102,23 +112,29 @@ actor AppServerTransport {
         var data = try JSONEncoder().encode(request)
         data.append(0x0A)
 
-        return try await withCheckedThrowingContinuation { continuation in
-            pending[id] = PendingRequest(method: method, continuation: continuation)
-            timeoutTasks[id] = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(15))
-                await self?.expireRequest(id: id)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                pending[id] = PendingRequest(method: method, continuation: continuation)
+                let timeout = Self.timeout(for: method)
+                timeoutTasks[id] = Task { [weak self] in
+                    try? await Task.sleep(for: timeout)
+                    await self?.expireRequest(id: id)
+                }
+                do {
+                    try inputHandle.write(contentsOf: data)
+                } catch {
+                    pending.removeValue(forKey: id)
+                    timeoutTasks.removeValue(forKey: id)?.cancel()
+                    continuation.resume(throwing: error)
+                }
             }
-            do {
-                try inputHandle.write(contentsOf: data)
-            } catch {
-                pending.removeValue(forKey: id)
-                timeoutTasks.removeValue(forKey: id)?.cancel()
-                continuation.resume(throwing: error)
-            }
+        } onCancel: {
+            Task { await self.cancelRequest(id: id) }
         }
     }
 
-    private func receive(line: String) {
+    private func receive(line: String, generation: UUID) {
+        guard generation == self.generation else { return }
         guard let data = line.data(using: .utf8) else { return }
         do {
             let message = try JSONDecoder().decode(AppServerIncomingMessage.self, from: data)
@@ -166,8 +182,26 @@ actor AppServerTransport {
         request.continuation.resume(throwing: AppServerTransportError.timedOut(method: request.method))
     }
 
-    private func processDidExit(status: Int32) {
-        guard !isStopping else { return }
+    private func cancelRequest(id: Int) {
+        timeoutTasks.removeValue(forKey: id)?.cancel()
+        guard let request = pending.removeValue(forKey: id) else { return }
+        request.continuation.resume(throwing: CancellationError())
+    }
+
+    private static func timeout(for method: String) -> Duration {
+        switch method {
+        case "initialize": .seconds(20)
+        case "skills/list", "hooks/list": .seconds(30)
+        case "mcpServerStatus/list": .seconds(45)
+        case "config/read", "config/batchWrite", "config/mcpServer/reload": .seconds(20)
+        case "account/rateLimits/read", "account/usage/read": .seconds(20)
+        default: .seconds(15)
+        }
+    }
+
+    private func processDidExit(status: Int32, generation: UUID) {
+        guard generation == self.generation else { return }
+        self.generation = nil
         process = nil
         inputHandle = nil
         finish(with: AppServerTransportError.processExited)
@@ -178,9 +212,22 @@ actor AppServerTransport {
             )
         )
     }
+
+    private func streamDidEnd(generation: UUID) {
+        guard generation == self.generation else { return }
+        let runningProcess = process
+        runningProcess?.terminationHandler = nil
+        self.generation = nil
+        process = nil
+        inputHandle = nil
+        finish(with: AppServerTransportError.processExited)
+        if runningProcess?.isRunning == true { runningProcess?.terminate() }
+        eventContinuation.yield(AppServerEvent(method: "client/processExited", params: nil))
+    }
 }
 
 private final class PipeLineReader: @unchecked Sendable {
+    private static let maximumBufferedBytes = 4 * 1_024 * 1_024
     private let handle: FileHandle
     private let onLine: @Sendable (String) -> Void
     private let onEnd: @Sendable () -> Void
@@ -230,6 +277,11 @@ private final class PipeLineReader: @unchecked Sendable {
                 buffer.removeAll(keepingCapacity: false)
             } else {
                 buffer.append(data)
+                if buffer.count > Self.maximumBufferedBytes {
+                    isStopped = true
+                    reachedEnd = true
+                    buffer.removeAll(keepingCapacity: false)
+                }
                 while let newline = buffer.firstIndex(of: 0x0A) {
                     let lineData = buffer[..<newline]
                     buffer.removeSubrange(...newline)

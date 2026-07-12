@@ -15,6 +15,8 @@ struct SkillRecord: Identifiable, Hashable, Sendable {
 
     var id: String { path }
 
+    var canModify: Bool { scope == .user || scope == .repo }
+
     var effectiveState: SkillEffectiveState {
         if !isEnabled { return .disabled }
         if !errors.isEmpty { return .error }

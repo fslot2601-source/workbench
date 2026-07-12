@@ -86,4 +86,28 @@ final class ProtocolDecodingTests: XCTestCase {
         XCTAssertEqual(response.data.first?.tools.count, 1)
         XCTAssertEqual(response.data.first?.authStatus, "oAuth")
     }
+
+    func testNonCriticalCollectionsDefaultWhenCodexOmitsThem() throws {
+        let skills = try JSONDecoder().decode(
+            SkillsListResponse.self,
+            from: Data(#"{"data":[{"cwd":"/tmp/project"}]}"#.utf8)
+        )
+        XCTAssertEqual(skills.data.first?.errors.count, 0)
+        XCTAssertEqual(skills.data.first?.skills.count, 0)
+
+        let hooks = try JSONDecoder().decode(
+            HooksListResponse.self,
+            from: Data(#"{"data":[{"cwd":"/tmp/project","hooks":[{"key":"future","eventName":"futureEvent"}]}]}"#.utf8)
+        )
+        let hook = try XCTUnwrap(hooks.data.first?.hooks.first)
+        XCTAssertEqual(hook.handlerType, "unknown")
+        XCTAssertEqual(hook.trustStatus, "unknown")
+
+        let mcp = try JSONDecoder().decode(
+            MCPServerStatusListResponse.self,
+            from: Data(#"{"data":[{"name":"sample"}],"nextCursor":null}"#.utf8)
+        )
+        XCTAssertEqual(mcp.data.first?.tools.count, 0)
+        XCTAssertEqual(mcp.data.first?.resources.count, 0)
+    }
 }

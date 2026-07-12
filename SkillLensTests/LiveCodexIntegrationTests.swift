@@ -55,7 +55,28 @@ final class LiveCodexIntegrationTests: XCTestCase {
                 executableURL: executable,
                 environment: ["CODEX_HOME": isolatedHome.path]
             )
-            try await service.setHookEnabled(key: "skilllens-test-hook", enabled: false, cwd: isolatedHome)
+            let hook = HookRecord(
+                key: "skilllens-test-hook",
+                event: .stop,
+                rawEventName: "stop",
+                handlerType: .command,
+                rawHandlerType: "command",
+                matcher: nil,
+                command: "/usr/bin/true",
+                timeoutSeconds: 5,
+                statusMessage: nil,
+                sourcePath: isolatedHome.appending(path: "config.toml").path,
+                source: .user,
+                rawSource: "user",
+                pluginID: nil,
+                displayOrder: 0,
+                isEnabled: true,
+                isManaged: false,
+                currentHash: "test",
+                trustStatus: .trusted,
+                rawTrustStatus: "trusted"
+            )
+            try await service.setHookEnabled(hook, enabled: false, cwd: isolatedHome)
             await service.disconnect()
 
             let config = try String(contentsOf: isolatedHome.appending(path: "config.toml"), encoding: .utf8)

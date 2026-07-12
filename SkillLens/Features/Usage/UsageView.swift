@@ -16,7 +16,13 @@ struct UsageView: View {
                         .background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
                 }
 
-                if model.rateLimits.isEmpty && model.tokenUsageSummary == nil && !model.isRefreshingUsage {
+                if model.rateLimits.isEmpty && model.tokenUsageSummary == nil && model.isRefreshingUsage {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在读取官方账户用量…").foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 260)
+                } else if model.rateLimits.isEmpty && model.tokenUsageSummary == nil {
                     ContentUnavailableView(
                         "当前账号没有可用的官方用量数据",
                         systemImage: "chart.xyaxis.line",

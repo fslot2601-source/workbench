@@ -1,6 +1,8 @@
 import Foundation
 
 enum SkillMetadataResolver {
+    private static let maximumMetadataBytes = 256 * 1_024
+
     static func invocationPolicy(skillPath: String) -> SkillInvocationPolicy {
         let skillURL = URL(fileURLWithPath: skillPath).standardizedFileURL
         let skillDirectory = skillURL.deletingLastPathComponent()
@@ -27,7 +29,7 @@ enum SkillMetadataResolver {
     }
 
     private static func policyFromJSON(at url: URL) -> SkillInvocationPolicy? {
-        guard let data = try? Data(contentsOf: url),
+        guard let data = boundedContents(of: url),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let policy = root["policy"] as? [String: Any],
               let value = policy["allow_implicit_invocation"] as? Bool
@@ -36,7 +38,9 @@ enum SkillMetadataResolver {
     }
 
     private static func policyFromYAML(at url: URL) -> SkillInvocationPolicy? {
-        guard let contents = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        guard let data = boundedContents(of: url),
+              let contents = String(data: data, encoding: .utf8)
+        else { return nil }
         for line in contents.split(whereSeparator: { $0.isNewline }) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("allow_implicit_invocation:") else { continue }
@@ -49,5 +53,15 @@ enum SkillMetadataResolver {
             if value == "false" { return .explicitOnly }
         }
         return nil
+    }
+
+    private static func boundedContents(of url: URL) -> Data? {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
+              values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              let size = values.fileSize,
+              size <= maximumMetadataBytes
+        else { return nil }
+        return try? Data(contentsOf: url, options: [.mappedIfSafe])
     }
 }

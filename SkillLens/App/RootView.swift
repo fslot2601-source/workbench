@@ -35,12 +35,14 @@ struct RootView: View {
                     } label: {
                         Label("切换工作区", systemImage: "folder")
                     }
-                    Button {
-                        Task { await model.refresh(forceReload: true) }
-                    } label: {
-                        Label("重新扫描", systemImage: "arrow.clockwise")
+                    if [.dashboard, .skills, .hooks].contains(model.selection) {
+                        Button {
+                            Task { await model.refresh(forceReload: true) }
+                        } label: {
+                            Label("重新扫描", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(model.isRefreshing)
                     }
-                    .disabled(model.isRefreshing)
                 }
             }
         }

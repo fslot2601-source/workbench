@@ -6,8 +6,10 @@
 
 1. 使用 macOS 14+ 与 Swift 6 工具链。
 2. 修改 `project.yml` 或新增源文件后运行 `xcodegen generate`。
-3. 运行完整测试，确保真实 Codex 集成测试使用临时 `CODEX_HOME`。
+3. 运行 `SkillLensTests`；有图形会话和 Xcode 自动化权限时，再单独运行 `SkillLensUITests`。真实 Codex 集成测试必须使用临时 `CODEX_HOME`。
 4. 提交应聚焦一个问题，并说明用户可见变化与验证结果。
+
+发布候选包使用 `./scripts/build-release.sh` 生成，并用 `./scripts/verify-release.sh` 复核。公开分发前必须使用 Developer ID Application 签名并完成 Apple 公证；完整步骤见 `docs/RELEASE_CHECKLIST.md`。
 
 ## 协议改动
 
@@ -19,3 +21,5 @@ Codex App Server 仍会演进。协议适配应遵守：忽略未知字段、保
 - 不执行 Skill 或 Hook 提供的内容。
 - 所有写操作必须经过 Codex 接口并回读验证。
 - 不把当前连接观察到的事件描述成全局历史。
+- MCP 可能通过 Codex 连接远程服务；界面不得泄露 URL 查询参数、启动参数、环境变量值或工具 schema。
+- 自动清理只能覆盖明确白名单内的缓存目录，必须拒绝符号链接、路径漂移和扫描后变化。

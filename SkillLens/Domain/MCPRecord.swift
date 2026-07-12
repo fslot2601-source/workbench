@@ -17,6 +17,9 @@ struct MCPRecord: Identifiable, Hashable, Sendable {
     let startupTimeoutSeconds: Int?
     let toolTimeoutSeconds: Int?
     let errorMessage: String?
+    let workspacePath: String
+    let canModify: Bool
+    let readOnlyReason: String?
 
     var id: String { name }
 
@@ -37,7 +40,10 @@ struct MCPRecord: Identifiable, Hashable, Sendable {
             resourceTemplateCount: resourceTemplateCount,
             startupTimeoutSeconds: startupTimeoutSeconds,
             toolTimeoutSeconds: toolTimeoutSeconds,
-            errorMessage: errorMessage
+            errorMessage: errorMessage,
+            workspacePath: workspacePath,
+            canModify: canModify,
+            readOnlyReason: readOnlyReason
         )
     }
 }

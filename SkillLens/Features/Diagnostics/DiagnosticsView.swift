@@ -36,6 +36,14 @@ struct DiagnosticsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("关于") {
+                LabeledContent("版本", value: versionText)
+                LabeledContent("最低系统", value: "macOS 14")
+                Text("Skill Lens 是独立开源项目，不包含遥测、广告或独立账户系统。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if !model.hookWarnings.isEmpty {
                 Section("Hook 警告") {
                     ForEach(model.hookWarnings, id: \.self) { warning in
@@ -47,5 +55,12 @@ struct DiagnosticsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("诊断")
+    }
+
+    private var versionText: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "开发版"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        return "\(version)（\(build)）"
     }
 }

@@ -2,7 +2,7 @@
 
 Skill Lens 是一个面向 macOS 的 Codex 本地能力控制台。它把 Skills、Hooks、MCP、账户用量和本机存储转换成普通人能理解的中文界面，并提供诊断与安全控制。
 
-项目目标不是替代 Codex，也不是做通用配置文件编辑器，而是回答四个问题：
+项目目标不是替代 Codex，也不是做通用配置文件编辑器，而是回答这些问题：
 
 - Codex 当前发现了哪些能力？
 - 某个 Skill 是否启用、是否允许自动匹配、来自哪里？
@@ -40,15 +40,33 @@ xcodegen generate
 xcodebuild -project SkillLens.xcodeproj -scheme SkillLens -configuration Debug -destination 'platform=macOS' build
 ```
 
-也可以直接用 Xcode 打开 `SkillLens.xcodeproj`。应用不会捆绑 Codex；首次启动会从常见位置寻找 `codex`，也可以在诊断页手动选择。
+也可以直接用 Xcode 打开 `SkillLens.xcodeproj`。应用不会捆绑 Codex；首次启动会从常见位置和 `PATH` 寻找 `codex`，也可以在诊断页手动选择。
+
+## 安装包与发布构建
+
+生成本机测试用的通用架构 ZIP、DMG 和 SHA-256：
+
+```sh
+./scripts/build-release.sh
+```
+
+产物位于 `dist/`。没有 Developer ID 证书时，脚本会明确标记为未签名本地包，不应作为正式下载版本发布。正式版本需要提供签名身份与钥匙串中的公证 profile；流程和验收命令见 [发布清单](docs/RELEASE_CHECKLIST.md)。
 
 ## 测试
 
 ```sh
-xcodebuild -project SkillLens.xcodeproj -scheme SkillLens -configuration Debug -destination 'platform=macOS' test
+xcodebuild -project SkillLens.xcodeproj -scheme SkillLens -configuration Debug \
+  -destination 'platform=macOS' -only-testing:SkillLensTests test
 ```
 
 测试包含协议 fixture、状态模型、脱敏规则，以及在临时 `CODEX_HOME` 中运行的真实 Codex App Server 集成测试。真实测试不会修改用户现有配置；未安装 Codex 时会自动跳过。
+
+UI 自动化需要当前 macOS 图形会话允许 Xcode 控制应用。授权后可单独运行：
+
+```sh
+xcodebuild -project SkillLens.xcodeproj -scheme SkillLens -configuration Debug \
+  -destination 'platform=macOS' -only-testing:SkillLensUITests test
+```
 
 ## 隐私与安全
 
@@ -60,8 +78,10 @@ xcodebuild -project SkillLens.xcodeproj -scheme SkillLens -configuration Debug -
 - 只承诺展示本应用连接所能观察到的 Hook 运行事件，不声称监控其他 Codex 客户端的全局会话。
 - MCP 的“已启用”只表示有效配置开关；只有实际返回能力清单时才标为能力已读取。
 - 存储页只读取文件元数据；自动清理限定在当前 Codex Home 下的固定缓存白名单，并在删除前二次校验。
+- MCP 清单和重载可能促使本机 Codex 连接用户已配置的远程 MCP；网络请求由 Codex 与相应 MCP 服务处理，Skill Lens 不另建上传通道。
+- 缓存清理不是安全擦除，不能用于销毁敏感数据。
 
-由于应用需要启动本机 Codex 并访问用户选择的工作区，当前开源构建不启用 App Sandbox。发布构建应启用 Hardened Runtime 并完成开发者签名与公证。
+由于应用需要启动本机 Codex 并访问用户选择的工作区，当前构建不启用 App Sandbox。工程为 Release 启用 Hardened Runtime；公开分发包必须再使用 Developer ID 签名并完成 Apple 公证。隐私清单位于应用资源中，声明应用自身不跟踪、不收集数据。
 
 ## 项目原则
 

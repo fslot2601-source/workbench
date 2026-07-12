@@ -134,7 +134,8 @@ private struct MCPDetailView: View {
                     Button(server.isEnabled ? "停用配置" : "启用配置") { confirmsChange = true }
                         .buttonStyle(.borderedProminent)
                         .tint(server.isEnabled ? .secondary : .accentColor)
-                        .disabled(isChanging || !CodexService.isSafeConfigKey(server.name))
+                        .disabled(isChanging || model.isChangingConfiguration || !server.canModify)
+                        .help(server.canModify ? "修改用户级 MCP 配置，并在写后重新读取验证" : (server.readOnlyReason ?? "该 MCP 保持只读"))
                 }
 
                 detailSection("连接") {

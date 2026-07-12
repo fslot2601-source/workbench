@@ -1,30 +1,27 @@
 import AppKit
 import SwiftUI
 
-@MainActor
-private enum AppEnvironment {
-    static let model = AppModel()
-}
-
 @main
 struct SkillLensApp: App {
     @NSApplicationDelegateAdaptor(SkillLensAppDelegate.self) private var appDelegate
-    @State private var model = AppEnvironment.model
+    @State private var model = AppModel()
 
     init() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            SkillLensWindowManager.shared.showMainWindow()
-        }
+        MainWindowRecovery.schedule()
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Skill Lens", id: "main") {
             RootView()
                 .environment(model)
                 .frame(minWidth: 980, minHeight: 640)
+                .background(MainWindowMarker())
                 .task { await model.bootstrap() }
         }
         .defaultSize(width: 1180, height: 760)
+        .commands {
+            MainWindowCommands()
+        }
 
         Settings {
             DiagnosticsView()
@@ -34,56 +31,94 @@ struct SkillLensApp: App {
     }
 }
 
-@MainActor
+private struct MainWindowCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("显示主窗口") {
+                if let window = MainWindowLocator.window {
+                    window.makeKeyAndOrderFront(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                } else {
+                    openWindow(id: "main")
+                }
+            }
+            .keyboardShortcut("1", modifiers: [.command, .shift])
+        }
+    }
+}
+
 final class SkillLensAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            SkillLensWindowManager.shared.showMainWindow()
-        }
+        MainWindowRecovery.schedule()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { SkillLensWindowManager.shared.showMainWindow() }
+        MainWindowRecovery.schedule()
         return true
     }
 }
 
 @MainActor
-private final class SkillLensWindowManager {
-    static let shared = SkillLensWindowManager()
-    private var mainWindowController: NSWindowController?
+private enum MainWindowRecovery {
+    private static var generation = 0
 
-    func showMainWindow() {
-        if let existing = NSApp.windows.first(where: { $0.isVisible && !($0 is NSPanel) }) {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
+    static func schedule() {
+        generation += 1
+        attempt(remaining: 12, generation: generation)
+    }
+
+    private static func attempt(remaining: Int, generation: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            guard generation == self.generation else { return }
+            if let window = MainWindowLocator.window {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                return
+            }
+            if let item = findMenuItem(titled: "显示主窗口", in: NSApp.mainMenu),
+               let action = item.action
+            {
+                NSApp.sendAction(action, to: item.target, from: item)
+                return
+            }
+            if remaining > 1 {
+                attempt(remaining: remaining - 1, generation: generation)
+            }
         }
-        if let window = mainWindowController?.window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
+    }
+
+    private static func findMenuItem(titled title: String, in menu: NSMenu?) -> NSMenuItem? {
+        guard let menu else { return nil }
+        for item in menu.items {
+            if item.title == title { return item }
+            if let match = findMenuItem(titled: title, in: item.submenu) { return match }
         }
+        return nil
+    }
+}
 
-        let rootView = RootView()
-            .environment(AppEnvironment.model)
-            .frame(minWidth: 980, minHeight: 640)
-            .task { await AppEnvironment.model.bootstrap() }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Skill Lens"
-        window.contentViewController = NSHostingController(rootView: rootView)
-        window.center()
-        window.setFrameAutosaveName("SkillLensMainWindow")
-        window.isReleasedWhenClosed = false
+@MainActor
+private enum MainWindowLocator {
+    static let identifier = NSUserInterfaceItemIdentifier("dev.skilllens.main-window")
 
-        let controller = NSWindowController(window: window)
-        mainWindowController = controller
-        controller.showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
+    static var window: NSWindow? {
+        NSApp.windows.first { $0.identifier == identifier }
+    }
+}
+
+private struct MainWindowMarker: NSViewRepresentable {
+    func makeNSView(context: Context) -> MarkerView {
+        MarkerView()
+    }
+
+    func updateNSView(_ nsView: MarkerView, context: Context) {}
+
+    final class MarkerView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.identifier = MainWindowLocator.identifier
+        }
     }
 }

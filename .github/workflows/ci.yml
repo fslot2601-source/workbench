@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  XCODEGEN_VERSION: "2.45.4"
+
 on:
   push:
   pull_request:
@@ -13,9 +16,13 @@ jobs:
         with:
           xcode-version: "16.2"
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          brew install xcodegen
+          test "$(xcodegen --version)" = "Version: $XCODEGEN_VERSION"
       - name: Generate project
         run: xcodegen generate
+      - name: Verify generated project is committed
+        run: git diff --exit-code -- SkillLens.xcodeproj
       - name: Build and test
         run: >-
           xcodebuild
@@ -36,13 +43,18 @@ jobs:
         with:
           xcode-version: "16.2"
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          brew install xcodegen
+          test "$(xcodegen --version)" = "Version: $XCODEGEN_VERSION"
       - name: Build unsigned release artifacts
         run: ./scripts/build-release.sh
       - name: Upload smoke artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Skill-Lens-unsigned-smoke
-          path: dist/*
+          path: |
+            dist/Skill-Lens-*.zip
+            dist/Skill-Lens-*.dmg
+            dist/Skill-Lens-*-SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7

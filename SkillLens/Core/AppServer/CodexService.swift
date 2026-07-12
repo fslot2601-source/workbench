@@ -21,7 +21,11 @@ actor CodexService {
         let id = UUID()
         let clientVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
         let task = Task { [transport] in
-            try await transport.start(executableURL: executableURL, environment: environment)
+            try await transport.start(
+                executableURL: executableURL,
+                environment: environment,
+                connectionID: id
+            )
             let response: InitializeResponse = try await transport.request(
                 method: "initialize",
                 params: .object([
@@ -43,7 +47,8 @@ actor CodexService {
                 codexHome: response.codexHome,
                 platformFamily: response.platformFamily,
                 platformOS: response.platformOS,
-                executablePath: executableURL.path
+                executablePath: executableURL.path,
+                connectionID: id
             )
             return info
         }

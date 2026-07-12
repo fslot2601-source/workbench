@@ -22,14 +22,19 @@ actor AppServerTransport {
         eventContinuation = pair.continuation
     }
 
-    func start(executableURL: URL, environment: [String: String] = [:]) throws {
+    @discardableResult
+    func start(
+        executableURL: URL,
+        environment: [String: String] = [:],
+        connectionID: UUID = UUID()
+    ) throws -> UUID {
         guard process == nil else { throw AppServerTransportError.alreadyStarted }
 
         let process = Process()
         let inputPipe = Pipe()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
-        let generation = UUID()
+        let generation = connectionID
 
         process.executableURL = executableURL
         process.arguments = ["app-server", "--stdio"]
@@ -66,6 +71,7 @@ actor AppServerTransport {
         }
         self.errorReader = errorReader
         errorReader.start()
+        return generation
     }
 
     func request<Response: Decodable & Sendable>(
@@ -153,13 +159,14 @@ actor AppServerTransport {
                     request.continuation.resume(throwing: AppServerTransportError.invalidResponse)
                 }
             } else if let method = message.method {
-                eventContinuation.yield(AppServerEvent(method: method, params: message.params))
+                eventContinuation.yield(AppServerEvent(method: method, params: message.params, connectionID: generation))
             }
         } catch {
             eventContinuation.yield(
                 AppServerEvent(
                     method: "client/malformedMessage",
-                    params: .object(["message": .string(error.localizedDescription)])
+                    params: .object(["message": .string(error.localizedDescription)]),
+                    connectionID: generation
                 )
             )
         }
@@ -208,7 +215,8 @@ actor AppServerTransport {
         eventContinuation.yield(
             AppServerEvent(
                 method: "client/processExited",
-                params: .object(["status": .number(Double(status))])
+                params: .object(["status": .number(Double(status))]),
+                connectionID: generation
             )
         )
     }
@@ -222,7 +230,9 @@ actor AppServerTransport {
         inputHandle = nil
         finish(with: AppServerTransportError.processExited)
         if runningProcess?.isRunning == true { runningProcess?.terminate() }
-        eventContinuation.yield(AppServerEvent(method: "client/processExited", params: nil))
+        eventContinuation.yield(
+            AppServerEvent(method: "client/processExited", params: nil, connectionID: generation)
+        )
     }
 }
 

@@ -109,6 +109,9 @@ struct DashboardView: View {
         if brokenSkills > 0 { values.append("有 \(brokenSkills) 个 Skill 需要检查配置或依赖。") }
         let trustHooks = model.hooks.filter { [.needsTrust, .changedSinceTrust].contains($0.runnableState) }.count
         if trustHooks > 0 { values.append("有 \(trustHooks) 个 Hook 尚未获得有效信任。") }
+        if model.mcpError != nil { values.append("MCP 状态读取不完整，请打开 MCP 页面查看。") }
+        if model.usageError != nil { values.append("账户用量读取不完整，请打开用量页面查看。") }
+        if model.storageError != nil { values.append("存储状态读取失败，请打开存储页面查看。") }
         return Array(values.prefix(8))
     }
 }

@@ -23,8 +23,20 @@ struct StorageView: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, minHeight: 260)
+                } else if model.storageRecords.isEmpty, let error = model.storageError {
+                    ContentUnavailableView {
+                        Label("存储信息读取失败", systemImage: "exclamationmark.triangle.fill")
+                    } description: {
+                        Text(error)
+                    } actions: {
+                        Button("重新扫描") { Task { await model.scanStorage() } }
+                    }
                 } else if model.storageRecords.isEmpty {
-                    ContentUnavailableView("无法读取存储信息", systemImage: "internaldrive")
+                    ContentUnavailableView(
+                        "Codex Home 暂无可统计内容",
+                        systemImage: "internaldrive",
+                        description: Text("没有发现可计入占用的文件；这不代表读取失败。")
+                    )
                 } else {
                     summary
                     VStack(spacing: 0) {
@@ -122,7 +134,10 @@ private struct StorageRow: View {
                 Button("清理", role: .destructive, action: clean)
                     .disabled(model.isClearingStorage)
             } else {
-                Image(systemName: "lock.fill").foregroundStyle(.secondary).frame(width: 44)
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44)
+                    .accessibilityLabel("受保护，不可清理")
             }
         }
         .padding(.vertical, 12)

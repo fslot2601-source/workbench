@@ -7,7 +7,7 @@
 - 有图形会话且已授权 Xcode 自动化时，单独运行 `SkillLensUITests` 验证单窗口启动并生成应用窗口截图；无图形会话的 CI 明确跳过，不伪装为已通过。
 - Release archive 同时包含 `arm64` 与 `x86_64`。
 - `.app` 包含有效 `PrivacyInfo.xcprivacy`、版本号和完整图标。
-- ZIP、DMG 均可解包或校验，SHA-256 清单通过。
+- ZIP 必须解包、DMG 必须只读挂载；其中的应用须与归档应用具有相同 bundle id、版本、双架构和文件内容，SHA-256 清单通过。
 
 ## 签名与公证
 
@@ -27,7 +27,7 @@ xcrun stapler validate "Skill-Lens-*.dmg"
 spctl --assess --type open --context context:primary-signature "Skill-Lens-*.dmg"
 ```
 
-没有证书时，脚本只生成供本机测试的未签名包，并明确输出警告；未签名包不得标记为正式下载版本。
+公开模式必须同时提供证书与公证 profile。只有一个变量、签名不是 Developer ID、缺少 stapled 公证票据或 Gatekeeper 评估失败时，脚本都会停止，且未完成包不会写入 `dist/`。每次构建前，根目录中的旧发布产物会移入 `dist/archive/`；CI 只上传 `dist/` 根目录中的当前 ZIP、DMG 和校验文件。没有证书时，脚本只生成供本机测试的未签名包并明确输出警告；未签名包不得标记为正式下载版本。
 
 ## 人工验收矩阵
 

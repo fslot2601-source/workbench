@@ -11,6 +11,8 @@ final class AppModel {
     var skills: [SkillRecord] = []
     var hooks: [HookRecord] = []
     var hookWarnings: [String] = []
+    var skillsError: String?
+    var hooksError: String?
     var hookRuns: [HookRunRecord] = []
     var rateLimits: [RateLimitRecord] = []
     var resetCreditsAvailable: Int?
@@ -40,6 +42,7 @@ final class AppModel {
     private var hasBootstrapped = false
     private var workspaceGeneration = 0
     private var connectionGeneration = 0
+    private var activeConnectionID: UUID?
     private var activeRefreshID: UUID?
 
     init() {
@@ -67,6 +70,8 @@ final class AppModel {
         activeRefreshID = requestID
         isRefreshing = true
         lastError = nil
+        skillsError = nil
+        hooksError = nil
         defer {
             if activeRefreshID == requestID {
                 isRefreshing = false
@@ -85,13 +90,16 @@ final class AppModel {
                       workspaceURL == workspace
                 else { return }
                 skills = result
+                skillsError = nil
             } catch {
                 guard activeRefreshID == requestID,
                       workspaceGeneration == generation,
                       workspaceURL == workspace
                 else { return }
                 skills = []
-                partialFailures.append("Skills：\(safeMessage(error))")
+                let message = safeMessage(error)
+                skillsError = message
+                partialFailures.append("Skills：\(message)")
             }
             do {
                 let hookResult = try await service.listHooks(cwd: workspace)
@@ -101,6 +109,7 @@ final class AppModel {
                 else { return }
                 hooks = hookResult.hooks
                 hookWarnings = hookResult.warnings
+                hooksError = nil
             } catch {
                 guard activeRefreshID == requestID,
                       workspaceGeneration == generation,
@@ -108,7 +117,9 @@ final class AppModel {
                 else { return }
                 hooks = []
                 hookWarnings = []
-                partialFailures.append("Hooks：\(safeMessage(error))")
+                let message = safeMessage(error)
+                hooksError = message
+                partialFailures.append("Hooks：\(message)")
             }
             if activeRefreshID == requestID, !partialFailures.isEmpty {
                 lastError = "部分功能不可用。" + partialFailures.joined(separator: "；")
@@ -122,6 +133,8 @@ final class AppModel {
             skills = []
             hooks = []
             hookWarnings = []
+            skillsError = message
+            hooksError = message
             lastError = message
             connectionState = .failed(message)
         }
@@ -144,6 +157,8 @@ final class AppModel {
         skills = []
         hooks = []
         hookWarnings = []
+        skillsError = nil
+        hooksError = nil
         hookRuns = []
         mcpServers = []
         mcpError = nil
@@ -163,6 +178,8 @@ final class AppModel {
         connectionGeneration += 1
         UserDefaults.standard.set(url.path, forKey: "codexExecutablePath")
         Task {
+            activeConnectionID = nil
+            hookRuns = []
             await service.disconnect()
             connectionState = .idle
             await refresh(forceReload: true)
@@ -388,6 +405,8 @@ final class AppModel {
             let info = try await ensureConnected()
             let home = URL(fileURLWithPath: info.codexHome)
             connectionGeneration += 1
+            activeConnectionID = nil
+            hookRuns = []
             await service.disconnect()
             connectionState = .idle
             try await storageService.clear(record: record, codexHome: home)
@@ -467,17 +486,23 @@ final class AppModel {
     }
 
     private func handle(_ event: AppServerEvent) async {
+        guard event.connectionID == activeConnectionID else { return }
         switch event.method {
         case "skills/changed":
             let workspace = workspaceURL
             let generation = workspaceGeneration
+            let previousSkillsError = skillsError
             do {
                 let refreshed = try await service.listSkills(cwd: workspace, forceReload: true)
                 guard workspaceGeneration == generation, workspaceURL == workspace else { return }
                 skills = refreshed
+                skillsError = nil
+                if lastError == previousSkillsError { lastError = nil }
             } catch {
                 guard workspaceGeneration == generation, workspaceURL == workspace else { return }
-                lastError = safeMessage(error)
+                let message = safeMessage(error)
+                skillsError = message
+                lastError = message
             }
         case "hook/started", "hook/completed", "hook_started", "hook_completed":
             guard let run = HookRunParser.parse(event: event, ownership: .attached) else {
@@ -497,12 +522,16 @@ final class AppModel {
             let message = status.map { "Codex App Server 已意外退出（状态码 \($0)）。可以点击重新扫描恢复连接。" }
                 ?? "Codex App Server 已意外退出。可以点击重新扫描恢复连接。"
             connectionGeneration += 1
+            activeConnectionID = nil
             await service.disconnect()
             lastError = message
             connectionState = .failed(message)
             skills = []
             hooks = []
             hookWarnings = []
+            hookRuns = []
+            skillsError = message
+            hooksError = message
             mcpServers = []
             rateLimits = []
             resetCreditsAvailable = nil
@@ -531,7 +560,11 @@ final class AppModel {
 
     private func ensureConnected() async throws -> CodexServerInfo {
         if case let .connected(info) = connectionState, await service.isConnected() { return info }
-        if case .connected = connectionState { connectionState = .idle }
+        if case .connected = connectionState {
+            connectionState = .idle
+            activeConnectionID = nil
+            hookRuns = []
+        }
         let generation = connectionGeneration
         connectionState = .locating
         let preferred = UserDefaults.standard.string(forKey: "codexExecutablePath")
@@ -543,6 +576,7 @@ final class AppModel {
         do {
             let info = try await service.connect(executableURL: executableURL)
             guard connectionGeneration == generation else { throw CancellationError() }
+            activeConnectionID = info.connectionID
             connectionState = .connected(info)
             startEventObservationIfNeeded()
             return info

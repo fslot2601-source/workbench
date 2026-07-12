@@ -29,11 +29,28 @@ struct HooksView: View {
         .onAppear {
             if selectedID == nil { selectedID = filteredHooks.first?.id }
         }
+        .onChange(of: filteredHooks.map(\.id)) { _, ids in
+            if let selectedID, ids.contains(selectedID) { return }
+            selectedID = ids.first
+        }
     }
 
     private var configurationView: some View {
         HSplitView {
             VStack(spacing: 0) {
+                if !model.hookWarnings.isEmpty {
+                    Button {
+                        model.selection = .diagnostics
+                    } label: {
+                        Label("有 \(model.hookWarnings.count) 条 Hook 警告，打开诊断查看", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(.orange.opacity(0.07))
+                    }
+                    .buttonStyle(.plain)
+                }
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -51,6 +68,14 @@ struct HooksView: View {
                         Text("正在读取 Hooks…").foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = model.hooksError {
+                    ContentUnavailableView {
+                        Label("Hooks 读取失败", systemImage: "exclamationmark.triangle.fill")
+                    } description: {
+                        Text(error)
+                    } actions: {
+                        Button("重新读取") { Task { await model.refresh(forceReload: true) } }
+                    }
                 } else if filteredHooks.isEmpty {
                     ContentUnavailableView(
                         "当前工作区没有 Hook",

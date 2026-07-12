@@ -31,5 +31,8 @@ struct MetricCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(.quaternary)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue("\(value)，\(subtitle)")
     }
 }

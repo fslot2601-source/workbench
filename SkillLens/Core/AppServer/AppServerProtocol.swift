@@ -27,6 +27,13 @@ struct AppServerErrorPayload: Decodable, Error, Sendable {
 struct AppServerEvent: Sendable {
     let method: String
     let params: JSONValue?
+    let connectionID: UUID?
+
+    init(method: String, params: JSONValue?, connectionID: UUID? = nil) {
+        self.method = method
+        self.params = params
+        self.connectionID = connectionID
+    }
 }
 
 enum AppServerTransportError: LocalizedError, Sendable {

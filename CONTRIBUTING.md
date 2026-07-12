@@ -9,7 +9,7 @@
 3. 运行 `SkillLensTests`；有图形会话和 Xcode 自动化权限时，再单独运行 `SkillLensUITests`。真实 Codex 集成测试必须使用临时 `CODEX_HOME`。
 4. 提交应聚焦一个问题，并说明用户可见变化与验证结果。
 
-发布候选包使用 `./scripts/build-release.sh` 生成，并用 `./scripts/verify-release.sh` 复核。公开分发前必须使用 Developer ID Application 签名并完成 Apple 公证；完整步骤见 `docs/RELEASE_CHECKLIST.md`。
+发布候选包使用 `./scripts/build-release.sh` 生成；脚本会调用 `verify-release.sh` 解包 ZIP、挂载 DMG 并复核内部应用。本地单独复核未签名包时必须显式设置 `ALLOW_UNSIGNED=1`。公开分发模式必须同时使用 Developer ID Application 与 Apple 公证；完整步骤见 `docs/RELEASE_CHECKLIST.md`。
 
 ## 协议改动
 

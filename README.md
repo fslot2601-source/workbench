@@ -50,7 +50,7 @@ xcodebuild -project SkillLens.xcodeproj -scheme SkillLens -configuration Debug -
 ./scripts/build-release.sh
 ```
 
-产物位于 `dist/`。没有 Developer ID 证书时，脚本会明确标记为未签名本地包，不应作为正式下载版本发布。正式版本需要提供签名身份与钥匙串中的公证 profile；流程和验收命令见 [发布清单](docs/RELEASE_CHECKLIST.md)。
+本次产物位于 `dist/` 根目录；再次构建时，旧产物会保留到 `dist/archive/`，避免 CI 或人工上传时混入旧版本。脚本会解开 ZIP、只读挂载 DMG，并确认两者包含同一版本、同一架构和同一内容的应用。没有 Developer ID 证书时，脚本会明确标记为未签名本地包，不应作为正式下载版本发布。公开模式必须同时提供签名身份与钥匙串中的公证 profile；缺少任意一项都会直接失败。流程和验收命令见 [发布清单](docs/RELEASE_CHECKLIST.md)。
 
 ## 测试
 

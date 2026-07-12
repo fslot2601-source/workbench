@@ -5,6 +5,7 @@ struct HookDetailView: View {
     let hook: HookRecord
     @State private var revealsCommand = false
     @State private var isChanging = false
+    @State private var confirmsChange = false
 
     var body: some View {
         ScrollView {
@@ -24,11 +25,7 @@ struct HookDetailView: View {
                         }
                         Spacer()
                         Button(hook.isEnabled ? "停用" : "启用") {
-                            isChanging = true
-                            Task {
-                                await model.setHook(hook, enabled: !hook.isEnabled)
-                                isChanging = false
-                            }
+                            confirmsChange = true
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(hook.isEnabled ? .secondary : .accentColor)
@@ -52,7 +49,7 @@ struct HookDetailView: View {
                     }
                     LabeledContent("最长等待", value: "\(hook.timeoutSeconds) 秒")
                     if hook.handlerType != .command {
-                        Label("当前 Codex 只执行 command 类型；这个处理器会被跳过。", systemImage: "exclamationmark.triangle.fill")
+                        Label("Skill Lens 当前不提供这种处理器的执行预览或修改能力，请以 Codex 的实际状态为准。", systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                     }
                     Button(revealsCommand ? "隐藏命令" : "显示脱敏命令") {
@@ -100,6 +97,18 @@ struct HookDetailView: View {
             .frame(maxWidth: 760, alignment: .leading)
         }
         .frame(minWidth: 470)
+        .confirmationDialog(hook.isEnabled ? "停用这个 Hook？" : "启用这个 Hook？", isPresented: $confirmsChange) {
+            Button(hook.isEnabled ? "停用 Hook" : "启用 Hook", role: hook.isEnabled ? .destructive : nil) {
+                isChanging = true
+                Task {
+                    await model.setHook(hook, enabled: !hook.isEnabled)
+                    isChanging = false
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("这会在个人 Codex 配置中写入该 Hook 的启停状态，并影响使用同一配置的 Codex 客户端。原始项目或插件配置不会被直接改写，托管配置仍保持只读。")
+        }
     }
 
     private var flowSection: some View {

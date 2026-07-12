@@ -4,6 +4,7 @@ struct SkillDetailView: View {
     @Environment(AppModel.self) private var model
     let skill: SkillRecord
     @State private var isChanging = false
+    @State private var confirmsChange = false
 
     var body: some View {
         ScrollView {
@@ -75,6 +76,18 @@ struct SkillDetailView: View {
             .frame(maxWidth: 760, alignment: .leading)
         }
         .frame(minWidth: 460)
+        .confirmationDialog(skill.isEnabled ? "停用这个 Skill？" : "启用这个 Skill？", isPresented: $confirmsChange) {
+            Button(skill.isEnabled ? "停用 Skill" : "启用 Skill", role: skill.isEnabled ? .destructive : nil) {
+                isChanging = true
+                Task {
+                    await model.setSkill(skill, enabled: !skill.isEnabled)
+                    isChanging = false
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("这会修改\(skill.scope == .repo ? "当前项目" : "个人")的 Codex Skill 状态，并影响使用同一配置的 Codex 客户端。Skill Lens 会在写入后重新读取验证。")
+        }
     }
 
     private var header: some View {
@@ -96,11 +109,7 @@ struct SkillDetailView: View {
             }
             Spacer()
             Button(skill.isEnabled ? "停用" : "启用") {
-                isChanging = true
-                Task {
-                    await model.setSkill(skill, enabled: !skill.isEnabled)
-                    isChanging = false
-                }
+                confirmsChange = true
             }
             .buttonStyle(.borderedProminent)
             .tint(skill.isEnabled ? .secondary : .accentColor)

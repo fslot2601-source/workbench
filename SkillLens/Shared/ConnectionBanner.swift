@@ -22,6 +22,9 @@ struct ConnectionBanner: View {
         }
         .padding(12)
         .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Codex 连接状态")
+        .accessibilityValue([state.title, detail].compactMap { $0 }.joined(separator: "，"))
     }
 
     private var detail: String? {

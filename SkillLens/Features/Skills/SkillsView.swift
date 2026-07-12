@@ -11,12 +11,32 @@ struct SkillsView: View {
             VStack(spacing: 0) {
                 filterBar
                 Divider()
+                if let error = model.skillsError, !model.skills.isEmpty {
+                    HStack(spacing: 8) {
+                        Label("Skills 更新失败，当前仍显示上次成功读取的状态", systemImage: "exclamationmark.triangle.fill")
+                        Spacer()
+                        Button("重试") { Task { await model.refresh(forceReload: true) } }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(10)
+                    .background(.orange.opacity(0.07))
+                    .help(error)
+                }
                 if model.skills.isEmpty && model.isRefreshing {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("正在读取 Skills…").foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if model.skills.isEmpty, let error = model.skillsError {
+                    ContentUnavailableView {
+                        Label("Skills 读取失败", systemImage: "exclamationmark.triangle.fill")
+                    } description: {
+                        Text(error)
+                    } actions: {
+                        Button("重新读取") { Task { await model.refresh(forceReload: true) } }
+                    }
                 } else if filteredSkills.isEmpty {
                     ContentUnavailableView(
                         "没有匹配的 Skill",
@@ -137,8 +157,12 @@ private struct SkillRow: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+                Text(skill.effectiveState.title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(skill.effectiveState.color)
             }
         }
         .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
     }
 }

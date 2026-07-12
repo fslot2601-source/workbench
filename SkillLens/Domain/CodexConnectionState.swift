@@ -23,4 +23,5 @@ struct CodexServerInfo: Equatable, Sendable {
     let platformFamily: String
     let platformOS: String
     let executablePath: String
+    let connectionID: UUID
 }

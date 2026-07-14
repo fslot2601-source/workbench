@@ -7,7 +7,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/fslot2601-source/workbench/ci.yml?branch=main&style=flat-square&label=build)](https://github.com/fslot2601-source/workbench/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
-<img src="docs/assets/app-icon-master.png" alt="Workbench app icon" width="160" />
+<img src="SkillLens/Resources/Assets.xcassets/AppIcon.appiconset/icon_1024.png" alt="Workbench app icon" width="160" />
 
 Workbench 是一款原生 macOS 应用，用来查看和管理本机 Codex 的能力与状态。它会告诉你 Skill 是隐式、显式还是隐藏，Hook 在什么时候触发，MCP 实际暴露了哪些工具，Memory 记住了什么，以及当前用量和本机存储占用了多少空间。
 

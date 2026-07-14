@@ -31,7 +31,7 @@ actor CodexService {
                 params: .object([
                     "clientInfo": .object([
                         "name": .string("skill_lens"),
-                        "title": .string("Skill Lens"),
+                        "title": .string("Workbench"),
                         "version": .string(clientVersion)
                     ]),
                     "capabilities": .object([
@@ -91,31 +91,7 @@ actor CodexService {
     }
 
     func setSkillEnabled(_ skill: SkillRecord, enabled: Bool, cwd: URL) async throws {
-        guard skill.canModify else { throw CodexServiceError.protectedSkill }
-        guard let serverInfo else { throw AppServerTransportError.notStarted }
-        let skillURL = URL(fileURLWithPath: skill.path).resolvingSymlinksInPath().standardizedFileURL
-        let home = FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath()
-        let codexHome = URL(fileURLWithPath: serverInfo.codexHome).resolvingSymlinksInPath()
-        let allowedRoots: [URL]
-        switch skill.scope {
-        case .user:
-            allowedRoots = [
-                codexHome.appending(path: "skills").resolvingSymlinksInPath(),
-                codexHome.appending(path: "plugins").resolvingSymlinksInPath(),
-                home.appending(path: ".agents/skills").resolvingSymlinksInPath()
-            ]
-        case .repo:
-            allowedRoots = [cwd.resolvingSymlinksInPath()]
-        default:
-            throw CodexServiceError.protectedSkill
-        }
-        guard allowedRoots.contains(where: { Self.contains(skillURL, inside: $0) }) else {
-            throw CodexServiceError.skillOutsideAllowedRoots
-        }
-        let values = try skillURL.resourceValues(forKeys: [.isRegularFileKey])
-        guard values.isRegularFile == true else {
-            throw CodexServiceError.invalidSkillFile
-        }
+        _ = try validatedSkillURL(skill, cwd: cwd)
         let _: EmptyResponse = try await transport.request(
             method: "skills/config/write",
             params: .object([
@@ -123,6 +99,22 @@ actor CodexService {
                 "enabled": .bool(enabled)
             ])
         )
+    }
+
+    func setSkillInvocationPolicy(
+        _ skill: SkillRecord,
+        policy: SkillInvocationPolicy,
+        cwd: URL
+    ) throws -> SkillMetadataMutation {
+        let skillURL = try validatedSkillURL(skill, cwd: cwd)
+        return try SkillMetadataResolver.writeInvocationPolicy(
+            skillPath: skillURL.path,
+            policy: policy
+        )
+    }
+
+    func restoreSkillInvocationPolicy(_ mutation: SkillMetadataMutation) throws {
+        try SkillMetadataResolver.restore(mutation)
     }
 
     func setHookEnabled(_ hook: HookRecord, enabled: Bool, cwd: URL) async throws {
@@ -201,37 +193,12 @@ actor CodexService {
         )
     }
 
-    func listMCPServers(cwd: URL) async throws -> [MCPRecord] {
+    func listConfiguredMCPServers(cwd: URL) async throws -> MCPListResult {
         let config = try await readConfig(cwd: cwd)
         let configured = config.config.objectValue?["mcp_servers"]?.objectValue ?? [:]
-
-        var inventory: [String: MCPServerStatusWire] = [:]
-        var cursor: String?
-        var seenCursors: Set<String> = []
-        var pageCount = 0
-        repeat {
-            pageCount += 1
-            guard pageCount <= 20 else { throw CodexServiceError.invalidMCPPagination }
-            let response: MCPServerStatusListResponse = try await transport.request(
-                method: "mcpServerStatus/list",
-                params: .object([
-                    "cursor": cursor.map(JSONValue.string) ?? .null,
-                    "detail": .string("full"),
-                    "limit": .number(100),
-                    "threadId": .null
-                ])
-            )
-            for item in response.data { inventory[item.name] = item }
-            cursor = response.nextCursor
-            if let cursor, !seenCursors.insert(cursor).inserted {
-                throw CodexServiceError.invalidMCPPagination
-            }
-        } while cursor != nil
-
-        let names = Set(configured.keys).union(inventory.keys)
-        return names.map { name in
-            let values = configured[name]?.objectValue ?? [:]
-            let status = inventory[name]
+        let checkedAt = Date()
+        let servers: [MCPRecord] = configured.map { name, value in
+            let values = value.objectValue ?? [:]
             let enabled = values["enabled"]?.boolValue ?? true
             let required = values["required"]?.boolValue ?? false
             let permission = Self.mcpModificationPermission(name: name, config: config, required: required)
@@ -240,27 +207,150 @@ actor CodexService {
             let transport: MCPTransport = url != nil ? .http : (command != nil ? .stdio : .unknown)
             return MCPRecord(
                 name: name,
-                displayName: DiagnosticRedactor.sanitize(status?.serverInfo?.title ?? status?.serverInfo?.name ?? name),
-                version: status?.serverInfo?.version.map(DiagnosticRedactor.sanitize),
-                description: status?.serverInfo?.description.map(DiagnosticRedactor.sanitize),
+                displayName: DiagnosticRedactor.sanitize(name),
+                version: nil,
+                description: nil,
                 transport: transport,
                 endpointSummary: Self.endpointSummary(url: url, command: command),
+                isConfigured: true,
                 isEnabled: enabled,
                 isRequired: required,
-                authStatus: MCPAuthStatus(protocolValue: status?.authStatus),
-                startupStatus: !enabled ? .disabled : (status == nil ? .configured : .inventoryAvailable),
-                toolCount: status?.tools.count ?? 0,
-                resourceCount: status?.resources.count ?? 0,
-                resourceTemplateCount: status?.resourceTemplates.count ?? 0,
+                authStatus: .unknown,
+                startupStatus: enabled ? .configured : .disabled,
+                inventoryStatus: .notReported,
+                tools: [],
+                resources: [],
                 startupTimeoutSeconds: values["startup_timeout_sec"]?.numberValue.map(Int.init),
                 toolTimeoutSeconds: values["tool_timeout_sec"]?.numberValue.map(Int.init),
+                configurationIssue: Self.mcpConfigurationIssue(url: url, command: command),
                 errorMessage: nil,
+                checkedAt: checkedAt,
                 workspacePath: cwd.path,
                 canModify: permission.allowed,
                 readOnlyReason: permission.reason
             )
         }
         .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        return MCPListResult(servers: servers, statusWarning: nil, checkedAt: checkedAt)
+    }
+
+    func listMCPServers(cwd: URL) async throws -> MCPListResult {
+        let config = try await readConfig(cwd: cwd)
+        let configured = config.config.objectValue?["mcp_servers"]?.objectValue ?? [:]
+        let checkedAt = Date()
+
+        var inventory: [String: MCPServerStatusWire] = [:]
+        var statusWarning: String?
+        do {
+            var cursor: String?
+            var seenCursors: Set<String> = []
+            var pageCount = 0
+            repeat {
+                pageCount += 1
+                guard pageCount <= 20 else { throw CodexServiceError.invalidMCPPagination }
+                let response: MCPServerStatusListResponse = try await transport.request(
+                    method: "mcpServerStatus/list",
+                    params: .object([
+                        "cursor": cursor.map(JSONValue.string) ?? .null,
+                        "detail": .string("full"),
+                        "limit": .number(100),
+                        "threadId": .null
+                    ])
+                )
+                for item in response.data { inventory[item.name] = item }
+                cursor = response.nextCursor
+                if let cursor, !seenCursors.insert(cursor).inserted {
+                    throw CodexServiceError.invalidMCPPagination
+                }
+            } while cursor != nil
+        } catch {
+            statusWarning = "能力状态检测没有完成：\(DiagnosticRedactor.commandSummary(error.localizedDescription))"
+        }
+
+        let names = Set(configured.keys).union(inventory.keys)
+        let servers: [MCPRecord] = names.map { name -> MCPRecord in
+            let values = configured[name]?.objectValue ?? [:]
+            let status = inventory[name]
+            let isConfigured = configured[name] != nil
+            let enabled = values["enabled"]?.boolValue ?? true
+            let required = values["required"]?.boolValue ?? false
+            let permission = Self.mcpModificationPermission(name: name, config: config, required: required)
+            let url = values["url"]?.stringValue
+            let command = values["command"]?.stringValue
+            let transport: MCPTransport = url != nil ? .http : (command != nil ? .stdio : .unknown)
+            let tools = status?.tools.values.map {
+                MCPToolRecord(
+                    name: DiagnosticRedactor.sanitize($0.name),
+                    title: $0.title.map(DiagnosticRedactor.sanitize),
+                    description: $0.description.map(DiagnosticRedactor.sanitize)
+                )
+            }
+            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending } ?? []
+            let resources = (status?.resources.map {
+                MCPResourceRecord(
+                    name: DiagnosticRedactor.sanitize($0.name),
+                    title: $0.title.map(DiagnosticRedactor.sanitize),
+                    description: $0.description.map(DiagnosticRedactor.sanitize),
+                    kind: .resource
+                )
+            } ?? []) + (status?.resourceTemplates.map {
+                MCPResourceRecord(
+                    name: DiagnosticRedactor.sanitize($0.name),
+                    title: $0.title.map(DiagnosticRedactor.sanitize),
+                    description: $0.description.map(DiagnosticRedactor.sanitize),
+                    kind: .template
+                )
+            } ?? [])
+            let inventoryStatus: MCPInventoryStatus
+            if status != nil {
+                inventoryStatus = .available
+            } else if let statusWarning {
+                inventoryStatus = .unavailable(statusWarning)
+            } else {
+                inventoryStatus = .notReported
+            }
+            let displayName = DiagnosticRedactor.sanitize(status?.serverInfo?.title ?? status?.serverInfo?.name ?? name)
+            let version = status?.serverInfo?.version.map(DiagnosticRedactor.sanitize)
+            let description = status?.serverInfo?.description.map(DiagnosticRedactor.sanitize)
+            let endpoint = Self.endpointSummary(url: url, command: command)
+            let startupStatus: MCPStartupStatus = !enabled ? .disabled : (status == nil ? .configured : .inventoryAvailable)
+            let startupTimeout = values["startup_timeout_sec"]?.numberValue.map(Int.init)
+            let toolTimeout = values["tool_timeout_sec"]?.numberValue.map(Int.init)
+            let configurationIssue = isConfigured ? Self.mcpConfigurationIssue(url: url, command: command) : nil
+            let authStatus = MCPAuthStatus(protocolValue: status?.authStatus)
+            let workspacePath = cwd.path
+            let canModify = permission.allowed
+            let readOnlyReason = permission.reason
+            let sortedResources = resources.sorted {
+                $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+            }
+            return MCPRecord(
+                name: name,
+                displayName: displayName,
+                version: version,
+                description: description,
+                transport: transport,
+                endpointSummary: endpoint,
+                isConfigured: isConfigured,
+                isEnabled: enabled,
+                isRequired: required,
+                authStatus: authStatus,
+                startupStatus: startupStatus,
+                inventoryStatus: inventoryStatus,
+                tools: tools,
+                resources: sortedResources,
+                startupTimeoutSeconds: startupTimeout,
+                toolTimeoutSeconds: toolTimeout,
+                configurationIssue: configurationIssue,
+                errorMessage: nil,
+                checkedAt: checkedAt,
+                workspacePath: workspacePath,
+                canModify: canModify,
+                readOnlyReason: readOnlyReason
+            )
+        }
+        .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        return MCPListResult(servers: servers, statusWarning: statusWarning, checkedAt: checkedAt)
     }
 
     func setMCPEnabled(name: String, enabled: Bool, cwd: URL) async throws {
@@ -284,15 +374,25 @@ actor CodexService {
                     ])
                 ]),
                 "expectedVersion": .string(userLayer.version),
-                "reloadUserConfig": .bool(true)
+                // 单项开关只落盘。Codex 的热更新与 MCP reload 都是全局操作，
+                // 在这里触发会让其他 MCP 一起重启并短暂改变状态。
+                "reloadUserConfig": .bool(false)
             ])
         )
         guard response.status == "ok" else { throw CodexServiceError.writeRejected }
-        let _: EmptyResponse = try await transport.request(method: "config/mcpServer/reload", params: .null)
 
         let verified = try await readConfig(cwd: cwd)
         let value = verified.config.objectValue?["mcp_servers"]?.objectValue?[name]?.objectValue?["enabled"]?.boolValue
         guard value == enabled else { throw CodexServiceError.writeVerificationFailed }
+    }
+
+    func reloadAllMCPServers() async throws {
+        let _: EmptyResponse = try await transport.request(method: "config/mcpServer/reload", params: .null)
+    }
+
+    func readUserConfig(cwd: URL) async throws -> JSONValue? {
+        let config = try await readConfig(cwd: cwd)
+        return config.layers?.first(where: { $0.sourceType == "user" })?.config
     }
 
     func disconnect() async {
@@ -358,7 +458,7 @@ actor CodexService {
             return (false, "这个 MCP 不属于可写的个人配置层。")
         }
         guard !definingLayers.contains(where: { $0.sourceType != "user" }) else {
-            return (false, "这个 MCP 同时由系统或管理员配置，Skill Lens 将它保持为只读。")
+            return (false, "这个 MCP 同时由系统或管理员配置，Workbench 将它保持为只读。")
         }
         return (true, nil)
     }
@@ -383,6 +483,26 @@ actor CodexService {
         return "未公开"
     }
 
+    static func mcpConfigurationIssue(url: String?, command: String?) -> String? {
+        if let url {
+            guard let components = URLComponents(string: url),
+                  let scheme = components.scheme?.lowercased(),
+                  ["http", "https"].contains(scheme),
+                  components.host?.isEmpty == false
+            else { return "远程地址不是有效的 HTTP 或 HTTPS URL。" }
+            return nil
+        }
+        if let command {
+            guard let executable = executableToken(command) else { return "本地启动命令为空。" }
+            if executable.hasPrefix("/") {
+                guard FileManager.default.fileExists(atPath: executable) else { return "本地启动器文件不存在。" }
+                guard FileManager.default.isExecutableFile(atPath: executable) else { return "本地启动器没有执行权限。" }
+            }
+            return nil
+        }
+        return "配置缺少远程地址或本地启动命令。"
+    }
+
     private static func executableToken(_ command: String) -> String? {
         let value = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
@@ -392,6 +512,35 @@ actor CodexService {
             return String(remainder[..<end])
         }
         return value.split(whereSeparator: \.isWhitespace).first.map(String.init)
+    }
+
+    private func validatedSkillURL(_ skill: SkillRecord, cwd: URL) throws -> URL {
+        guard skill.canModify else { throw CodexServiceError.protectedSkill }
+        guard let serverInfo else { throw AppServerTransportError.notStarted }
+        let skillURL = URL(fileURLWithPath: skill.path).resolvingSymlinksInPath().standardizedFileURL
+        let home = FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath()
+        let codexHome = URL(fileURLWithPath: serverInfo.codexHome).resolvingSymlinksInPath()
+        let allowedRoots: [URL]
+        switch skill.scope {
+        case .user:
+            allowedRoots = [
+                codexHome.appending(path: "skills").resolvingSymlinksInPath(),
+                codexHome.appending(path: "plugins").resolvingSymlinksInPath(),
+                home.appending(path: ".agents/skills").resolvingSymlinksInPath()
+            ]
+        case .repo:
+            allowedRoots = [cwd.resolvingSymlinksInPath()]
+        default:
+            throw CodexServiceError.protectedSkill
+        }
+        guard allowedRoots.contains(where: { Self.contains(skillURL, inside: $0) }) else {
+            throw CodexServiceError.skillOutsideAllowedRoots
+        }
+        let values = try skillURL.resourceValues(forKeys: [.isRegularFileKey])
+        guard values.isRegularFile == true else {
+            throw CodexServiceError.invalidSkillFile
+        }
+        return skillURL
     }
 
     private static func contains(_ child: URL, inside root: URL) -> Bool {
@@ -423,8 +572,8 @@ enum CodexServiceError: LocalizedError, Sendable {
 
     var errorDescription: String? {
         switch self {
-        case .unsafeHookKey: "该 Hook 的标识包含不支持的字符，为避免写错配置，Skill Lens 将它保持为只读。"
-        case .unsafeMCPName: "该 MCP 名称包含不支持的字符，为避免写错配置，Skill Lens 将它保持为只读。"
+        case .unsafeHookKey: "该 Hook 的标识包含不支持的字符，为避免写错配置，Workbench 将它保持为只读。"
+        case .unsafeMCPName: "该 MCP 名称包含不支持的字符，为避免写错配置，Workbench 将它保持为只读。"
         case .userConfigLayerMissing: "Codex 没有返回可写的用户配置层。"
         case .writeRejected: "Codex 没有确认配置写入成功。"
         case .managedHook: "该 Hook 由系统或管理员管理，不能在这里修改。"

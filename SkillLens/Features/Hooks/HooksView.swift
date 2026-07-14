@@ -25,6 +25,7 @@ struct HooksView: View {
                 HookActivityView(runs: model.hookRuns)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("Hooks")
         .onAppear {
             if selectedID == nil { selectedID = filteredHooks.first?.id }
@@ -36,8 +37,9 @@ struct HooksView: View {
     }
 
     private var configurationView: some View {
-        HSplitView {
-            VStack(spacing: 0) {
+        GeometryReader { geometry in
+            HSplitView {
+                VStack(spacing: 0) {
                 if !model.hookWarnings.isEmpty {
                     Button {
                         model.selection = .diagnostics
@@ -58,7 +60,7 @@ struct HooksView: View {
                         .textFieldStyle(.plain)
                 }
                 .padding(9)
-                .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 9))
+                .background(WorkbenchTheme.subtleFill, in: RoundedRectangle(cornerRadius: 9))
                 .padding(12)
                 Divider()
 
@@ -83,28 +85,62 @@ struct HooksView: View {
                         description: Text("Hooks 会按工作区计算有效配置。")
                     )
                 } else {
-                    List(filteredHooks, selection: $selectedID) { hook in
-                        HookRow(hook: hook)
-                            .tag(hook.id)
+                    List(selection: $selectedID) {
+                        ForEach(groupedHooks) { group in
+                            Section {
+                                ForEach(group.hooks) { hook in
+                                    HookRow(hook: hook)
+                                        .tag(hook.id)
+                                }
+                            } header: {
+                                HStack {
+                                    Text(group.title)
+                                    Spacer()
+                                    Text("\(group.hooks.count) 个 Hook")
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
                     }
                     .listStyle(.inset)
+                    .scrollContentBackground(.hidden)
                 }
-            }
-            .frame(minWidth: 340, idealWidth: 410)
+                }
+                .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
+                .frame(height: geometry.size.height)
+                .background(WorkbenchTheme.panel)
 
-            if let selectedHook {
-                HookDetailView(hook: selectedHook)
-            } else {
-                ContentUnavailableView("选择一个 Hook", systemImage: "link")
-                    .frame(minWidth: 430)
+                Group {
+                    if let selectedHook {
+                        HookDetailView(hook: selectedHook)
+                    } else {
+                        ContentUnavailableView("选择一个 Hook", systemImage: "link")
+                            .frame(minWidth: 360)
+                    }
+                }
+                .frame(height: geometry.size.height)
+                .background(WorkbenchTheme.canvas)
             }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
     }
 
     private var filteredHooks: [HookRecord] {
         guard !searchText.isEmpty else { return model.hooks }
         return model.hooks.filter { hook in
-            [hook.event.title, hook.rawEventName, hook.source.title, hook.matcher ?? "", hook.statusMessage ?? ""]
+            [
+                hook.event.title,
+                hook.displayName,
+                hook.key,
+                hook.rawEventName,
+                hook.source.title,
+                hook.matcher ?? "",
+                hook.statusMessage ?? "",
+                hook.triggerSummary,
+                hook.matchSummary,
+                hook.actionSummary,
+                hook.effectSummary
+            ]
                 .joined(separator: " ")
                 .localizedCaseInsensitiveContains(searchText)
         }
@@ -114,6 +150,29 @@ struct HooksView: View {
         guard let selectedID else { return nil }
         return model.hooks.first { $0.id == selectedID }
     }
+
+    private var groupedHooks: [HookGroup] {
+        var groups: [HookGroup] = []
+        for hook in filteredHooks {
+            if let index = groups.firstIndex(where: { $0.rawEventName == hook.rawEventName }) {
+                groups[index].hooks.append(hook)
+            } else {
+                groups.append(HookGroup(
+                    rawEventName: hook.rawEventName,
+                    title: hook.event.title,
+                    hooks: [hook]
+                ))
+            }
+        }
+        return groups
+    }
+}
+
+private struct HookGroup: Identifiable {
+    let rawEventName: String
+    let title: String
+    var hooks: [HookRecord]
+    var id: String { rawEventName }
 }
 private enum HookViewMode: String, CaseIterable, Identifiable {
     case configuration, activity
@@ -131,13 +190,17 @@ private struct HookRow: View {
                 .font(.title3)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 5) {
-                Text(hook.event.title)
+                Text(hook.displayName)
                     .font(.headline)
-                Text(hook.statusMessage ?? hook.matcher ?? hook.handlerType.title)
+                Text(hook.actionSummary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                Text("\(hook.source.title) · \(hook.runnableState.title)")
+                Text("匹配：\(hook.matchSummary)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("\(hook.configurationStateTitle) · \(hook.source.title) · \(hook.runnableState.title)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }

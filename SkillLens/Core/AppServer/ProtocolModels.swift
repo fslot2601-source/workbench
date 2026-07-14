@@ -269,12 +269,14 @@ struct MCPToolWire: Codable, Sendable {
 struct MCPResourceWire: Codable, Sendable {
     let name: String
     let title: String?
+    let description: String?
     let uri: String
 }
 
 struct MCPResourceTemplateWire: Codable, Sendable {
     let name: String
     let title: String?
+    let description: String?
     let uriTemplate: String
 }
 

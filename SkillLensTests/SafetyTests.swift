@@ -79,6 +79,65 @@ final class SafetyTests: XCTestCase {
         XCTAssertFalse(CodexService.mcpModificationPermission(name: "sample", config: managedOverride, required: false).allowed)
     }
 
+    func testMCPVisibilityConversationNeverAsksCodexToCallTools() throws {
+        let server = testMCPServer()
+        let prompt = try XCTUnwrap(
+            MCPConversationTestDraft.prompt(server: server, mode: .visibility)
+        )
+
+        XCTAssertTrue(prompt.contains("不要调用任何 MCP 工具"))
+        XCTAssertTrue(prompt.contains(server.name))
+        XCTAssertFalse(prompt.contains("确认调用"))
+    }
+
+    func testMCPRealInvocationConversationRequiresKnownToolAndObjective() throws {
+        let server = testMCPServer()
+        XCTAssertNil(
+            MCPConversationTestDraft.prompt(
+                server: server,
+                mode: .realInvocation,
+                toolName: "missing",
+                objective: "查询状态"
+            )
+        )
+        XCTAssertNil(
+            MCPConversationTestDraft.prompt(
+                server: server,
+                mode: .realInvocation,
+                toolName: "search",
+                objective: "   "
+            )
+        )
+
+        let prompt = try XCTUnwrap(
+            MCPConversationTestDraft.prompt(
+                server: server,
+                mode: .realInvocation,
+                toolName: "search",
+                objective: "查询一条只读状态"
+            )
+        )
+        XCTAssertTrue(prompt.contains("等待我明确回复“确认调用”"))
+        XCTAssertTrue(prompt.contains("在我确认之前，不要调用任何工具"))
+    }
+
+    func testMCPConversationURLUsesCodexNewThreadAndKeepsPromptInQuery() throws {
+        let prompt = "检查 MCP，不要调用"
+        let url = try XCTUnwrap(
+            MCPConversationTestDraft.codexURL(
+                prompt: prompt,
+                workspaceURL: URL(fileURLWithPath: "/tmp/测试 工作区")
+            )
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+
+        XCTAssertEqual(components.scheme, "codex")
+        XCTAssertEqual(components.host, "threads")
+        XCTAssertEqual(components.path, "/new")
+        XCTAssertEqual(components.queryItems?.first(where: { $0.name == "prompt" })?.value, prompt)
+        XCTAssertEqual(components.queryItems?.first(where: { $0.name == "path" })?.value, "/tmp/测试 工作区")
+    }
+
     func testMetadataResolverReadsExplicitOnlyPolicy() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -97,6 +156,33 @@ final class SafetyTests: XCTestCase {
         )
     }
 
+    private func testMCPServer() -> MCPRecord {
+        MCPRecord(
+            name: "sample",
+            displayName: "Sample",
+            version: nil,
+            description: "Sample MCP",
+            transport: .stdio,
+            endpointSummary: "sample-server",
+            isConfigured: true,
+            isEnabled: true,
+            isRequired: false,
+            authStatus: .unsupported,
+            startupStatus: .inventoryAvailable,
+            inventoryStatus: .available,
+            tools: [.init(name: "search", title: "Search", description: "Find items")],
+            resources: [],
+            startupTimeoutSeconds: nil,
+            toolTimeoutSeconds: nil,
+            configurationIssue: nil,
+            errorMessage: nil,
+            checkedAt: Date(),
+            workspacePath: "/tmp",
+            canModify: true,
+            readOnlyReason: nil
+        )
+    }
+
     func testMetadataResolverIgnoresOversizedMetadata() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let skillDirectory = root.appending(path: "sample")
@@ -108,5 +194,53 @@ final class SafetyTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
 
         XCTAssertEqual(SkillMetadataResolver.invocationPolicy(skillPath: skillURL.path), .automaticAllowed)
+    }
+
+    func testMetadataWriterChangesPolicyPreservesOtherFieldsAndRollsBack() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let skillDirectory = root.appending(path: "sample")
+        let agentsDirectory = skillDirectory.appending(path: "agents")
+        try FileManager.default.createDirectory(at: agentsDirectory, withIntermediateDirectories: true)
+        let skillURL = skillDirectory.appending(path: "SKILL.md")
+        let metadataURL = agentsDirectory.appending(path: "openai.yaml")
+        let original = "interface:\n  display_name: Sample\npolicy:\n  allow_implicit_invocation: true\n"
+        try "---\nname: sample\ndescription: test\n---\n".write(to: skillURL, atomically: true, encoding: .utf8)
+        try original.write(to: metadataURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let mutation = try SkillMetadataResolver.writeInvocationPolicy(
+            skillPath: skillURL.path,
+            policy: .explicitOnly
+        )
+        let changed = try String(contentsOf: metadataURL, encoding: .utf8)
+        XCTAssertTrue(changed.contains("display_name: Sample"))
+        XCTAssertTrue(changed.contains("allow_implicit_invocation: false"))
+        XCTAssertEqual(SkillMetadataResolver.invocationPolicy(skillPath: skillURL.path), .explicitOnly)
+
+        try SkillMetadataResolver.restore(mutation)
+        XCTAssertEqual(try String(contentsOf: metadataURL, encoding: .utf8), original)
+    }
+
+    func testMetadataWriterRejectsSymlinkedAgentsDirectory() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let skillDirectory = root.appending(path: "sample")
+        let externalDirectory = root.appending(path: "external")
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: externalDirectory, withIntermediateDirectories: true)
+        let skillURL = skillDirectory.appending(path: "SKILL.md")
+        try Data().write(to: skillURL)
+        try FileManager.default.createSymbolicLink(
+            at: skillDirectory.appending(path: "agents"),
+            withDestinationURL: externalDirectory
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertThrowsError(
+            try SkillMetadataResolver.writeInvocationPolicy(
+                skillPath: skillURL.path,
+                policy: .explicitOnly
+            )
+        )
+        XCTAssertTrue((try FileManager.default.contentsOfDirectory(atPath: externalDirectory.path)).isEmpty)
     }
 }

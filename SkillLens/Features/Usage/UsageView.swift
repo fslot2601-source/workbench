@@ -97,7 +97,7 @@ struct UsageView: View {
                         }
                     }
                     .padding(16)
-                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
+                    .background(WorkbenchTheme.card, in: RoundedRectangle(cornerRadius: 14))
                 }
             }
         }
@@ -133,12 +133,12 @@ struct UsageView: View {
                 }
                 .chartXAxis(.hidden)
                 .frame(height: 220)
-                Text("官方接口只提供 Token 活动，不提供截图中的美元费用和最常用模型；Skill Lens 不会伪造这些数字。")
+                Text("官方接口只提供 Token 活动，不提供截图中的美元费用和最常用模型；Workbench 不会伪造这些数字。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(16)
-            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
+            .background(WorkbenchTheme.card, in: RoundedRectangle(cornerRadius: 14))
         }
     }
 
@@ -218,6 +218,6 @@ private struct UsageMetric: View {
             Spacer()
         }
         .padding(14)
-        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
+        .background(WorkbenchTheme.card, in: RoundedRectangle(cornerRadius: 12))
     }
 }

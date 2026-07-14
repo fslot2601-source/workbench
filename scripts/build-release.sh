@@ -21,7 +21,7 @@ rm -rf "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT" "$STAGE" "$PACKAGE_DIR" "$DIST"
 
 shopt -s nullglob
-existing_artifacts=("$DIST"/Skill-Lens-*)
+existing_artifacts=("$DIST"/Workbench-* "$DIST"/Skill-Lens-*)
 shopt -u nullglob
 if (( ${#existing_artifacts[@]} > 0 )); then
     PREVIOUS_DIR="$DIST/archive/$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -48,14 +48,14 @@ xcodebuild \
     SKIP_INSTALL=NO \
     clean archive
 
-SOURCE_APP="$ARCHIVE/Products/Applications/SkillLens.app"
+SOURCE_APP="$ARCHIVE/Products/Applications/Workbench.app"
 test -d "$SOURCE_APP"
-cp -R "$SOURCE_APP" "$STAGE/Skill Lens.app"
-APP="$STAGE/Skill Lens.app"
+cp -R "$SOURCE_APP" "$STAGE/Workbench.app"
+APP="$STAGE/Workbench.app"
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
-BASE_NAME="Skill-Lens-${VERSION}-${BUILD}"
+BASE_NAME="Workbench-${VERSION}-${BUILD}"
 FINAL_ZIP="$DIST/${BASE_NAME}.zip"
 FINAL_DMG="$DIST/${BASE_NAME}.dmg"
 FINAL_CHECKSUMS="$DIST/${BASE_NAME}-SHA256SUMS.txt"
@@ -72,7 +72,7 @@ CHECKSUMS="$PACKAGE_DIR/${BASE_NAME}-SHA256SUMS.txt"
 
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 ln -s /Applications "$STAGE/Applications"
-hdiutil create -quiet -fs HFS+ -volname "Skill Lens ${VERSION}" -srcfolder "$STAGE" "$DMG"
+hdiutil create -quiet -fs HFS+ -volname "Workbench ${VERSION}" -srcfolder "$STAGE" "$DMG"
 
 if [[ -n "$SIGNING_IDENTITY" ]]; then
     codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$DMG"

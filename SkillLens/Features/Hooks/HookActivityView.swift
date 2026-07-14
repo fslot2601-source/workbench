@@ -8,8 +8,9 @@ struct HookActivityView: View {
             ContentUnavailableView(
                 "还没有可观察的 Hook 运行",
                 systemImage: "waveform.path.ecg",
-                description: Text("这里只显示 Skill Lens 当前 App Server 连接观察到的瞬态事件；无法确认归属时会标为“已附加会话”。")
+                description: Text("这里只显示 Workbench 当前 App Server 连接观察到的瞬态事件；无法确认归属时会标为“已附加会话”。")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 0) {
                 Text("运行条目会做常见凭据脱敏，但本地 Hook 可输出任意文本；分享截图或日志前仍应人工检查。")
@@ -45,6 +46,7 @@ struct HookActivityView: View {
                 }
                 .listStyle(.inset)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 

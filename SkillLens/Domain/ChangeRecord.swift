@@ -9,6 +9,8 @@ struct ChangeRecord: Identifiable, Codable, Hashable, Sendable {
     let workspacePath: String
     let previousEnabled: Bool
     let requestedEnabled: Bool
+    let previousState: String?
+    let requestedState: String?
     let outcome: ChangeOutcome
     let message: String
 
@@ -21,6 +23,8 @@ struct ChangeRecord: Identifiable, Codable, Hashable, Sendable {
         workspacePath: String,
         previousEnabled: Bool,
         requestedEnabled: Bool,
+        previousState: String? = nil,
+        requestedState: String? = nil,
         outcome: ChangeOutcome,
         message: String
     ) {
@@ -32,6 +36,8 @@ struct ChangeRecord: Identifiable, Codable, Hashable, Sendable {
         self.workspacePath = workspacePath
         self.previousEnabled = previousEnabled
         self.requestedEnabled = requestedEnabled
+        self.previousState = previousState
+        self.requestedState = requestedState
         self.outcome = outcome
         self.message = message
     }

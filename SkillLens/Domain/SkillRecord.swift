@@ -27,6 +27,50 @@ struct SkillRecord: Identifiable, Hashable, Sendable {
     var hasProblem: Bool {
         isEnabled && [.error, .missingDependency].contains(effectiveState)
     }
+
+    var mode: SkillMode {
+        guard isEnabled else { return .hidden }
+        return invocationPolicy == .explicitOnly ? .explicit : .implicit
+    }
+
+    var isPluginProvided: Bool {
+        path.contains("/.codex/plugins/")
+    }
+}
+
+enum SkillMode: String, CaseIterable, Codable, Identifiable, Sendable {
+    case implicit
+    case explicit
+    case hidden
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .implicit: "隐式"
+        case .explicit: "显式"
+        case .hidden: "隐藏"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .implicit: "sparkles"
+        case .explicit: "at"
+        case .hidden: "eye.slash"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .implicit:
+            "Skill 处于可用状态，Codex 可以根据任务内容自动匹配，也可以用 $名称 手动点名。"
+        case .explicit:
+            "Skill 处于可用状态，但 Codex 不会自动选择；需要在提示词中用 $名称 点名。"
+        case .hidden:
+            "Skill 已停用，不参与自动匹配，手动点名也不会正常加载，直到重新切换为显式或隐式。"
+        }
+    }
 }
 
 enum SkillScope: String, CaseIterable, Codable, Sendable {

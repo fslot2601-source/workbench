@@ -10,7 +10,7 @@ struct ChangeHistoryView: View {
                 ContentUnavailableView(
                     "还没有变更记录",
                     systemImage: "clock.arrow.circlepath",
-                    description: Text("启停 Skill 或 Hook 后，写入结果和回读验证会记录在这里。")
+                    description: Text("切换 Skill 状态或启停 Hook 后，写入结果和回读验证会记录在这里。")
                 )
             } else {
                 List(model.changeHistory) { record in
@@ -50,7 +50,7 @@ private struct ChangeHistoryRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("\(record.previousEnabled ? "启用" : "停用") → \(record.requestedEnabled ? "启用" : "停用") · \(record.outcome.title)")
+                Text(changeSummary)
                     .font(.callout)
                 Text(record.message)
                     .font(.caption)
@@ -68,5 +68,12 @@ private struct ChangeHistoryRow: View {
                 .frame(maxWidth: 260, alignment: .trailing)
         }
         .padding(.vertical, 7)
+    }
+
+    private var changeSummary: String {
+        if let previousState = record.previousState, let requestedState = record.requestedState {
+            return "\(previousState) → \(requestedState) · \(record.outcome.title)"
+        }
+        return "\(record.previousEnabled ? "启用" : "停用") → \(record.requestedEnabled ? "启用" : "停用") · \(record.outcome.title)"
     }
 }

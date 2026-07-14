@@ -33,7 +33,7 @@ validate_app() {
     local expected_build="$3"
     local plist="$candidate/Contents/Info.plist"
     local privacy="$candidate/Contents/Resources/PrivacyInfo.xcprivacy"
-    local executable="$candidate/Contents/MacOS/SkillLens"
+    local executable="$candidate/Contents/MacOS/Workbench"
 
     test -d "$candidate"
     plutil -lint "$plist" "$privacy"
@@ -54,7 +54,7 @@ BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")"
 validate_app "$APP" "$VERSION" "$BUILD"
 
 ditto -x -k "$ZIP" "$TEMP_DIR/zip-check"
-ZIP_APP="$TEMP_DIR/zip-check/Skill Lens.app"
+ZIP_APP="$TEMP_DIR/zip-check/Workbench.app"
 validate_app "$ZIP_APP" "$VERSION" "$BUILD"
 diff -qr "$APP" "$ZIP_APP"
 
@@ -62,7 +62,7 @@ hdiutil verify "$DMG"
 mkdir -p "$DMG_MOUNT"
 hdiutil attach -nobrowse -readonly -mountpoint "$DMG_MOUNT" "$DMG" >/dev/null
 DMG_ATTACHED=1
-DMG_APP="$DMG_MOUNT/Skill Lens.app"
+DMG_APP="$DMG_MOUNT/Workbench.app"
 validate_app "$DMG_APP" "$VERSION" "$BUILD"
 test -L "$DMG_MOUNT/Applications"
 test "$(readlink "$DMG_MOUNT/Applications")" = "/Applications"
@@ -89,5 +89,5 @@ else
         echo "Unsigned artifacts require ALLOW_UNSIGNED=1 and are never valid public releases." >&2
         exit 65
     fi
-    echo "Unsigned local artifact verified. Do not publish it as notarized software."
+    echo "Unsigned community artifact verified. If published, label it as unsigned and not notarized."
 fi

@@ -84,6 +84,7 @@ final class ProtocolDecodingTests: XCTestCase {
         let data = Data(#"{"data":[{"name":"sample","authStatus":"oAuth","tools":{"search":{"name":"search","title":"Search","description":"Find items","inputSchema":{"type":"object"}}},"resources":[],"resourceTemplates":[],"serverInfo":{"name":"sample","title":"Sample MCP","version":"1.0","description":null,"websiteUrl":"https://example.test"}}],"nextCursor":null}"#.utf8)
         let response = try JSONDecoder().decode(MCPServerStatusListResponse.self, from: data)
         XCTAssertEqual(response.data.first?.tools.count, 1)
+        XCTAssertEqual(response.data.first?.tools["search"]?.description, "Find items")
         XCTAssertEqual(response.data.first?.authStatus, "oAuth")
     }
 

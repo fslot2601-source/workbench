@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "8845837A4EA1D2357B2D1B15"
-               BuildableName = "SkillLens.app"
+               BuildableName = "Workbench.app"
                BlueprintName = "SkillLens"
                ReferencedContainer = "container:SkillLens.xcodeproj">
             </BuildableReference>
@@ -33,7 +33,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8845837A4EA1D2357B2D1B15"
-            BuildableName = "SkillLens.app"
+            BuildableName = "Workbench.app"
             BlueprintName = "SkillLens"
             ReferencedContainer = "container:SkillLens.xcodeproj">
          </BuildableReference>
@@ -80,7 +80,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8845837A4EA1D2357B2D1B15"
-            BuildableName = "SkillLens.app"
+            BuildableName = "Workbench.app"
             BlueprintName = "SkillLens"
             ReferencedContainer = "container:SkillLens.xcodeproj">
          </BuildableReference>
@@ -99,7 +99,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8845837A4EA1D2357B2D1B15"
-            BuildableName = "SkillLens.app"
+            BuildableName = "Workbench.app"
             BlueprintName = "SkillLens"
             ReferencedContainer = "container:SkillLens.xcodeproj">
          </BuildableReference>

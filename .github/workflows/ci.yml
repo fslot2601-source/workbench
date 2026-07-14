@@ -51,10 +51,10 @@ jobs:
       - name: Upload smoke artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Skill-Lens-unsigned-smoke
+          name: Workbench-unsigned-smoke
           path: |
-            dist/Skill-Lens-*.zip
-            dist/Skill-Lens-*.dmg
-            dist/Skill-Lens-*-SHA256SUMS.txt
+            dist/Workbench-*.zip
+            dist/Workbench-*.dmg
+            dist/Workbench-*-SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7

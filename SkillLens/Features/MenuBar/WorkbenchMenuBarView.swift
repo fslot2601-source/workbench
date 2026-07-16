@@ -67,16 +67,23 @@ struct WorkbenchMenuBarView: View {
         .frame(width: MenuBarPanelLayout.width, height: panelHeight)
         .tint(WorkbenchTheme.accent)
         .onPreferenceChange(MenuBarContentHeightKey.self) { contentHeight in
-            guard contentHeight > 0 else { return }
-            let nextHeight = MenuBarPanelLayout.height(for: contentHeight)
-            guard abs(nextHeight - panelHeight) >= 1 else { return }
-            panelHeight = nextHeight
-            contentHeightDidChange(nextHeight)
+            Task { @MainActor in
+                updatePanelHeight(for: contentHeight)
+            }
         }
         .task {
             let age = model.usageRefreshedAt.map { Date().timeIntervalSince($0) } ?? .infinity
             if age > 180 { await model.refreshUsage() }
         }
+    }
+
+    @MainActor
+    private func updatePanelHeight(for contentHeight: CGFloat) {
+        guard contentHeight > 0 else { return }
+        let nextHeight = MenuBarPanelLayout.height(for: contentHeight)
+        guard abs(nextHeight - panelHeight) >= 1 else { return }
+        panelHeight = nextHeight
+        contentHeightDidChange(nextHeight)
     }
 
     private var header: some View {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 - 2026-07-16
+
+- 兼容 Codex 整合进 ChatGPT 后的新安装位置，自动发现 `ChatGPT.app` 内置的 Codex，同时继续支持旧版 `Codex.app` 与独立 Codex CLI。
+- 设置页现在可以直接选择 `ChatGPT.app`、旧版 `Codex.app` 或 `codex` 可执行文件，并自动解析应用内的实际执行路径。
+- 手动选择无效位置、普通文件或缺少执行权限时显示具体原因，不再统一误报为“没有找到 Codex CLI”。
+- 增加应用包、独立可执行文件、符号链接与错误路径的回归测试，并通过当前 ChatGPT 内置 App Server 的真实连接验证。
+
 ## 1.2.0 - 2026-07-14
 
 - 应用更名为 Workbench，更新 App 图标和状态栏单色工具图标，并保留原 bundle id 以兼容已有本地设置。

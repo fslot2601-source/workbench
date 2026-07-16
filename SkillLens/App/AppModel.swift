@@ -215,15 +215,25 @@ final class AppModel {
 
     func chooseCodexExecutable() {
         let panel = NSOpenPanel()
-        panel.title = "选择 Codex 可执行文件"
+        panel.title = "选择 ChatGPT 或 Codex"
+        panel.message = "可以选择 ChatGPT.app、旧版 Codex.app，或名为 codex 的可执行文件。"
         panel.prompt = "选择"
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        let executableURL: URL
+        do {
+            executableURL = try locator.resolveSelection(url)
+        } catch {
+            let message = safeMessage(error)
+            connectionState = .failed(message)
+            lastError = message
+            return
+        }
         connectionGeneration += 1
-        UserDefaults.standard.set(url.path, forKey: "codexExecutablePath")
+        UserDefaults.standard.set(executableURL.path, forKey: "codexExecutablePath")
         Task {
             activeConnectionID = nil
             hookRuns = []
@@ -1011,7 +1021,7 @@ enum AppModelError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .codexNotFound:
-            "没有找到 Codex CLI。请在设置中手动选择 codex 可执行文件。"
+            "没有找到 ChatGPT 内置 Codex 或独立 Codex CLI。请在设置中选择 ChatGPT.app 或 codex 可执行文件。"
         case .writeVerificationFailed:
             "Codex 接受了写入请求，但重新读取后状态没有生效。原状态已保留。"
         case .configurationChangeInProgress:

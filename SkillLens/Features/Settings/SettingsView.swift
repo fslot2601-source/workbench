@@ -115,8 +115,8 @@ private struct CodexSettingsView: View {
                 } else {
                     LabeledContent("连接", value: model.connectionState.title)
                 }
-                Button("手动选择 Codex…") { model.chooseCodexExecutable() }
-                Text("通常无需手动选择；只有 Workbench 找不到 Codex 时才使用。")
+                Button("选择 ChatGPT 或 Codex…") { model.chooseCodexExecutable() }
+                Text("通常无需手动选择。Workbench 支持 ChatGPT.app 内置 Codex，也支持单独安装的 Codex CLI。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

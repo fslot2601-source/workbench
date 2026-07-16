@@ -1,9 +1,55 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Workbench 更新</title>
-    <link>https://github.com/fslot2601-source/workbench/releases</link>
-    <description>Workbench for macOS 稳定版更新</description>
-    <language>zh-CN</language>
-  </channel>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Workbench 更新</title>
+        <link>https://github.com/fslot2601-source/workbench/releases</link>
+        <description>Workbench for macOS 稳定版更新</description>
+        <language>zh-CN</language>
+        <item>
+            <title>1.3.0</title>
+            <pubDate>Thu, 16 Jul 2026 16:06:55 +0800</pubDate>
+            <link>https://github.com/fslot2601-source/workbench/releases/latest</link>
+            <sparkle:version>17</sparkle:version>
+            <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# Workbench 1.3.0
+
+这个版本加入自动更新，并公开后续开发路线。
+
+## 自动更新
+
+- 在应用菜单和“设置 → 关于”中增加“检查更新…”。
+- 默认定期从 Workbench GitHub 仓库检查新版本，也可以在设置中关闭自动检查。
+- 更新包使用独立的 EdDSA 签名验证；即使当前社区版本没有 Apple Developer ID，也不会安装无法验证来源的更新 ZIP。
+- GitHub Release 手动下载入口继续保留，自动更新失败时仍可直接下载安装包。
+
+1.3.0 是首个内置更新器的版本。1.2.3 及更早版本无法自动发现它，需要最后手动更新一次；安装 1.3.0 后，后续版本即可在应用内检查和安装。
+
+## 开发路线
+
+- 仓库新增公开路线图，说明正在做、接下来、后续考虑和暂不计划的内容。
+- GitHub Issue 会用于跟踪需要跨版本真实验证的发布事项。
+
+## 发布安全
+
+- 更新私钥只保存在维护者的 macOS 钥匙串，不进入仓库、日志或 GitHub Artifact。
+- 发布验证会检查 Sparkle 框架、更新公钥、更新地址、双架构和 ZIP/DMG 内容一致性。
+- 当前仍为未签名、未公证的社区构建，首次安装方式没有变化。
+
+## 系统要求
+
+- macOS 14 或更高版本。
+- 本机已安装并登录 ChatGPT 桌面版，或已单独安装 Codex CLI。
+
+## 下载
+
+- `Workbench-1.3.0-17.dmg`：拖入“应用程序”安装。
+- `Workbench-1.3.0-17.zip`：直接解压使用，也是应用内自动更新使用的安装包。
+- `Workbench-1.3.0-17-SHA256SUMS.txt`：下载校验值。
+
+当前社区构建没有 Apple Developer ID 签名，也没有经过 Apple 公证。首次打开时，请在 Finder 中右键 Workbench 并选择“打开”。
+]]></description>
+            <enclosure url="https://github.com/fslot2601-source/workbench/releases/download/v1.3.0/Workbench-1.3.0-17.zip" length="5439762" type="application/octet-stream" sparkle:edSignature="HkC2kiXWxe1EDoLvdhrHv9Jgt+eXGQEvCUo0DhaBuL1nF6maoMwPFCYL7dkmUmbya64ZQJkLFYCBMcur7rklBA=="/>
+        </item>
+    </channel>
 </rss>

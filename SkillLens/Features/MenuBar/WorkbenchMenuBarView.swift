@@ -1,14 +1,43 @@
 import SwiftUI
 
+enum MenuBarPanelLayout {
+    static let width: CGFloat = 380
+    static let initialHeight: CGFloat = 420
+    static let minimumHeight: CGFloat = 300
+    static let maximumHeight: CGFloat = 520
+
+    static func height(for contentHeight: CGFloat) -> CGFloat {
+        min(max(ceil(contentHeight), minimumHeight), maximumHeight)
+    }
+}
+
+private struct MenuBarContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct WorkbenchMenuBarView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(WorkbenchPreferences.showMenuBarTokenActivityKey) private var showTokenActivity = true
     @AppStorage(WorkbenchPreferences.showMenuBarStorageKey) private var showStorage = true
+    @State private var panelHeight = MenuBarPanelLayout.initialHeight
     let openDestination: (SidebarDestination) -> Void
+    let contentHeightDidChange: (CGFloat) -> Void
+
+    init(
+        openDestination: @escaping (SidebarDestination) -> Void,
+        contentHeightDidChange: @escaping (CGFloat) -> Void = { _ in }
+    ) {
+        self.openDestination = openDestination
+        self.contentHeightDidChange = contentHeightDidChange
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
                 header
                 if let limit = preferredLimit {
                     limitSection(limit)
@@ -25,10 +54,25 @@ struct WorkbenchMenuBarView: View {
                 Divider()
                 actions
             }
-            .padding(16)
+            .padding(14)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: MenuBarContentHeightKey.self,
+                        value: geometry.size.height
+                    )
+                }
+            }
         }
-        .frame(width: 380, height: 560)
+        .frame(width: MenuBarPanelLayout.width, height: panelHeight)
         .tint(WorkbenchTheme.accent)
+        .onPreferenceChange(MenuBarContentHeightKey.self) { contentHeight in
+            guard contentHeight > 0 else { return }
+            let nextHeight = MenuBarPanelLayout.height(for: contentHeight)
+            guard abs(nextHeight - panelHeight) >= 1 else { return }
+            panelHeight = nextHeight
+            contentHeightDidChange(nextHeight)
+        }
         .task {
             let age = model.usageRefreshedAt.map { Date().timeIntervalSince($0) } ?? .infinity
             if age > 180 { await model.refreshUsage() }
@@ -66,7 +110,7 @@ struct WorkbenchMenuBarView: View {
 
     @ViewBuilder
     private func limitSection(_ limit: RateLimitRecord) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Codex 限额").font(.subheadline.bold())
                 Spacer()
@@ -85,7 +129,7 @@ struct WorkbenchMenuBarView: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(12)
+        .padding(10)
         .background(WorkbenchTheme.subtleFill.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
     }
 
@@ -114,7 +158,7 @@ struct WorkbenchMenuBarView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(WorkbenchTheme.subtleFill.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
     }
@@ -154,7 +198,7 @@ struct WorkbenchMenuBarView: View {
     }
 
     private var actions: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 2) {
             actionButton("打开用量", symbol: "chart.xyaxis.line") { openDestination(.usage) }
             actionButton("打开 Workbench", symbol: "macwindow") { openDestination(.dashboard) }
             SettingsLink {
@@ -163,7 +207,7 @@ struct WorkbenchMenuBarView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.vertical, 6)
+            .padding(.vertical, 5)
             actionButton("退出 Workbench", symbol: "power") { NSApplication.shared.terminate(nil) }
         }
     }
@@ -175,7 +219,7 @@ struct WorkbenchMenuBarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
     }
 
     private func menuMetric(_ title: String, _ value: String) -> some View {

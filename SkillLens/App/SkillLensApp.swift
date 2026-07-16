@@ -125,17 +125,32 @@ final class SkillLensAppDelegate: NSObject, NSApplicationDelegate {
         let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = true
-        popover.contentSize = NSSize(width: 380, height: 560)
+        popover.contentSize = NSSize(
+            width: MenuBarPanelLayout.width,
+            height: MenuBarPanelLayout.initialHeight
+        )
         popover.contentViewController = NSHostingController(
-            rootView: WorkbenchMenuBarView { [weak self] destination in
-                self?.statusPopover?.close()
-                self?.showMainWindow(destination: destination)
-            }
+            rootView: WorkbenchMenuBarView(
+                openDestination: { [weak self] destination in
+                    self?.statusPopover?.close()
+                    self?.showMainWindow(destination: destination)
+                },
+                contentHeightDidChange: { [weak self] height in
+                    self?.resizeStatusPopover(to: height)
+                }
+            )
             .environment(model)
             .tint(WorkbenchTheme.accent)
         )
         statusItem = item
         statusPopover = popover
+    }
+
+    private func resizeStatusPopover(to height: CGFloat) {
+        guard let statusPopover,
+              abs(statusPopover.contentSize.height - height) >= 1
+        else { return }
+        statusPopover.contentSize = NSSize(width: MenuBarPanelLayout.width, height: height)
     }
 
     @objc private func toggleStatusPopover(_ sender: NSStatusBarButton) {

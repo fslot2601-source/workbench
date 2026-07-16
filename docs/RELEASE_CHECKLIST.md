@@ -39,6 +39,29 @@ spctl --assess --type open --context context:primary-signature "Workbench-*.dmg"
 
 签名模式必须同时提供证书与公证 profile。只有一个变量、签名不是 Developer ID、缺少 stapled 公证票据或 Gatekeeper 评估失败时，脚本都会停止，且未完成包不会写入 `dist/`。每次构建前，根目录中的旧 Workbench 产物会移入 `dist/archive/`；CI 只上传 `dist/` 根目录中的当前 ZIP、DMG 和校验文件。没有证书时，脚本生成已验证结构与校验和的未签名社区构建。
 
+## 自动更新源
+
+从首个内置 Sparkle 的版本开始，Workbench 使用根目录的 `appcast.xml` 检查 GitHub Release 更新。Apple Developer ID 与 Sparkle 更新签名不是一回事：社区构建可以没有付费证书，但 ZIP 更新包必须由 Workbench 的 EdDSA 私钥签名。
+
+私钥由 Sparkle 保存为 macOS 钥匙串项目：
+
+- service：`https://sparkle-project.org`
+- account：`workbench`
+- 用途：只用于签署 Workbench 更新包
+
+私钥不写入脚本、文档、日志、仓库或 Release。公钥通过 `SUPublicEDKey` 写入应用。应使用 Sparkle `generate_keys --account workbench -x` 将私钥导出到离线加密备份；导出文件不得放在仓库目录、网盘公开目录或 GitHub Artifact 中。
+
+发布顺序：
+
+1. 更新版本号、build、CHANGELOG 和 Release Notes。
+2. 运行 `./scripts/build-release.sh` 并完成安装包验证。
+3. 创建 GitHub Release，上传 ZIP、DMG 和 SHA-256 文件，确认下载地址已经公开可访问。
+4. 运行 `./scripts/generate-appcast.sh <版本号>`，由本机钥匙串签署 ZIP 并更新 `appcast.xml`。
+5. 检查 appcast 中的版本、build、下载地址、文件长度和 EdDSA 签名，然后提交并推送 `appcast.xml`。
+6. 从上一个正式版本执行“检查更新…”，完成一次真实下载、验证、替换和重新启动。
+
+不能先发布 appcast 再上传安装包，否则客户端可能在短时间内发现一个无法下载的更新。丢失私钥时也不能直接生成新钥匙继续发布；没有 Developer ID 作为第二信任链时，旧客户端不会信任新钥匙。
+
 ## 人工验收矩阵
 
 - 全新用户：首次启动、Codex 未安装、手动选择 Codex、切换工作区。
@@ -55,3 +78,4 @@ spctl --assess --type open --context context:primary-signature "Workbench-*.dmg"
 - 更新 `MARKETING_VERSION`、`CURRENT_PROJECT_VERSION` 和 `CHANGELOG.md` 日期。
 - 记录 commit、Xcode/macOS 版本、测试数量、DMG/ZIP SHA-256。
 - 不提交证书、notary profile、API key、token 或公证日志中的敏感字段。
+- 记录 appcast 生成结果和从上一正式版本完成自动更新的验收结果，但不记录私钥内容。

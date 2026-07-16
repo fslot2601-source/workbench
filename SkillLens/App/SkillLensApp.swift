@@ -14,6 +14,14 @@ struct SkillLensApp: App {
         Settings {
             WorkbenchSettingsView()
                 .environment(appDelegate.model)
+                .environment(appDelegate.updateController)
+        }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("检查更新…") {
+                    appDelegate.updateController.checkForUpdates()
+                }
+            }
         }
     }
 }
@@ -21,6 +29,7 @@ struct SkillLensApp: App {
 @MainActor
 final class SkillLensAppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
+    let updateController = WorkbenchUpdateController()
     private var mainWindow: NSWindow?
     private var usageRefreshTask: Task<Void, Never>?
     private var statusItem: NSStatusItem?

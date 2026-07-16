@@ -127,6 +127,8 @@ private struct CodexSettingsView: View {
 }
 
 private struct AboutSettingsView: View {
+    @Environment(WorkbenchUpdateController.self) private var updateController
+
     var body: some View {
         VStack(spacing: 14) {
             Image(nsImage: NSApplication.shared.applicationIconImage)
@@ -136,6 +138,19 @@ private struct AboutSettingsView: View {
             Text("为 Codex 制作的 macOS 本地工具箱")
                 .foregroundStyle(.secondary)
             Text(versionText).font(.caption).foregroundStyle(.secondary)
+            Divider().frame(width: 300)
+            Toggle(
+                "自动检查更新",
+                isOn: Binding(
+                    get: { updateController.automaticallyChecksForUpdates },
+                    set: { updateController.automaticallyChecksForUpdates = $0 }
+                )
+            )
+            .toggleStyle(.switch)
+            .frame(width: 300)
+            Button("检查更新…") {
+                updateController.checkForUpdates()
+            }
             Divider().frame(width: 300)
             Text("独立开源项目 · 无遥测 · 无广告 · 无独立账户系统")
                 .font(.caption)

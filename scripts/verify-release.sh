@@ -34,6 +34,7 @@ validate_app() {
     local plist="$candidate/Contents/Info.plist"
     local privacy="$candidate/Contents/Resources/PrivacyInfo.xcprivacy"
     local executable="$candidate/Contents/MacOS/Workbench"
+    local sparkle="$candidate/Contents/Frameworks/Sparkle.framework"
 
     test -d "$candidate"
     plutil -lint "$plist" "$privacy"
@@ -41,11 +42,27 @@ validate_app() {
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$expected_version"
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$expected_build"
     test -x "$executable"
+    test -d "$sparkle"
+    test "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$plist")" = "IRigQ31Wujzi5fOaTekPlKJaom/JvrYfuSmkgjeiiOo="
+    test "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist")" = "https://raw.githubusercontent.com/fslot2601-source/workbench/main/appcast.xml"
 
     local archs
     archs="$(lipo -archs "$executable")"
     echo "$archs" | grep -q arm64
     echo "$archs" | grep -q x86_64
+}
+
+compare_app() {
+    local expected="$1"
+    local candidate="$2"
+    local changes
+
+    changes="$(rsync -rnic --delete --links --itemize-changes "$expected/" "$candidate/")"
+    if [[ -n "$changes" ]]; then
+        echo "Packaged application differs from the verified build:" >&2
+        echo "$changes" >&2
+        exit 65
+    fi
 }
 
 PLIST="$APP/Contents/Info.plist"
@@ -56,7 +73,7 @@ validate_app "$APP" "$VERSION" "$BUILD"
 ditto -x -k "$ZIP" "$TEMP_DIR/zip-check"
 ZIP_APP="$TEMP_DIR/zip-check/Workbench.app"
 validate_app "$ZIP_APP" "$VERSION" "$BUILD"
-diff -qr "$APP" "$ZIP_APP"
+compare_app "$APP" "$ZIP_APP"
 
 hdiutil verify "$DMG"
 mkdir -p "$DMG_MOUNT"
@@ -66,7 +83,7 @@ DMG_APP="$DMG_MOUNT/Workbench.app"
 validate_app "$DMG_APP" "$VERSION" "$BUILD"
 test -L "$DMG_MOUNT/Applications"
 test "$(readlink "$DMG_MOUNT/Applications")" = "/Applications"
-diff -qr "$APP" "$DMG_APP"
+compare_app "$APP" "$DMG_APP"
 hdiutil detach "$DMG_MOUNT" >/dev/null
 DMG_ATTACHED=0
 

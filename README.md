@@ -101,6 +101,7 @@ xcodebuild -project SkillLens.xcodeproj -scheme SkillLens -configuration Debug \
 
 ## Docs
 
+- [开发路线](ROADMAP.md)
 - [执行边界与兼容策略](docs/EXECUTION_PLAN.md)
 - [发布清单](docs/RELEASE_CHECKLIST.md)
 - [版本记录](CHANGELOG.md)
